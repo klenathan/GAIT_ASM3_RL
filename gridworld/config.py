@@ -1,0 +1,94 @@
+
+# Grid Dimensions
+GRID_WIDTH = 10
+GRID_HEIGHT = 10
+TILE_SIZE = 60
+
+# Colors
+COLOR_BG = (30, 30, 30)
+COLOR_GRID = (50, 50, 50)
+COLOR_AGENT = (0, 200, 255)
+COLOR_ROCK = (100, 100, 100)
+COLOR_FIRE = (255, 50, 0)
+COLOR_APPLE = (0, 255, 0)
+COLOR_CHEST = (255, 215, 0)
+COLOR_KEY = (0, 0, 255)
+COLOR_MONSTER = (200, 0, 200)
+
+# Learning Parameters
+ALPHA = 0.1  # Learning rate
+GAMMA = 0.99 # Discount factor
+EPSILON_START = 1.0
+EPSILON_END = 0.01
+EPSILON_DECAY = 0.995
+
+# Rewards
+REWARD_STEP = -0.01
+REWARD_APPLE = 1.0
+REWARD_CHEST = 2.0
+REWARD_DEATH = -10.0
+REWARD_WIN = 10.0 # Bonus for completing all objectives
+
+# Level Layouts
+# 0: Empty, 1: Rocks, 2: Fire, 3: Apple, 4: Chest, 5: Key, 6: Monster
+# Start position is usually (0, 0) or defined separately
+
+LEVEL_0 = [
+    "..........",
+    "..........",
+    "..........",
+    "..........",
+    "..........",
+    "..........",
+    "..........",
+    "..........",
+    "..........",
+    "........A."
+]
+
+LEVEL_1 = [
+    "..........",
+    "..........",
+    ".RRRRRRRR.",
+    "..........",
+    "..........",
+    ".RRRRRRRR.",
+    "..........",
+    "..........",
+    ".FFFFFFFF.",
+    "........A."
+]
+
+LEVEL_2 = [
+    "..........",
+    ".R.R.R.R..",
+    ".R.R.R.R..",
+    "..........",
+    "....K.....",
+    "..........",
+    ".RRRRRRRR.",
+    "..........",
+    ".........C",
+    "........A."
+]
+
+LEVEL_3 = LEVEL_2 # Placeholder for now
+
+LEVEL_4 = [
+    "..........",
+    "..........",
+    "..........",
+    "....M.....",
+    "..........",
+    "..........",
+    "....M.....",
+    "..........",
+    "..........",
+    "........A."
+]
+
+LEVEL_5 = LEVEL_4 # Placeholder for now
+
+LEVEL_6 = LEVEL_0 # Intrinsic reward level
+
+LEVELS = [LEVEL_0, LEVEL_1, LEVEL_2, LEVEL_3, LEVEL_4, LEVEL_5, LEVEL_6]

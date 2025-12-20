@@ -1,0 +1,24 @@
+# General
+__pycache__/
+*.py[cod]
+*$py.class
+.DS_Store
+.pkl
+*.log
+
+# Environment
+.venv/
+venv/
+env/
+.env
+
+# Editor
+.vscode/
+.idea/
+
+# Distribution / Build
+dist/
+build/
+*.egg-info/
+models/*.zip
+logs/*
