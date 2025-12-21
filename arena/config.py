@@ -32,13 +32,25 @@ COLOR_HEALTH_BAD = (255, 50, 50)
 COLOR_PANEL_BG = (20, 20, 40)
 COLOR_PANEL_BORDER = (100, 100, 150)
 
+# Status/notification colors
+COLOR_STATUS_ERROR = (255, 80, 80)
+COLOR_STATUS_SUCCESS = (80, 255, 80)
+COLOR_STATUS_WARNING = (255, 180, 50)
+COLOR_STATUS_LOADING = (100, 200, 255)
+COLOR_STATUS_INFO = (150, 150, 255)
+COLOR_STATUS_BG_ERROR = (80, 20, 20)
+COLOR_STATUS_BG_SUCCESS = (20, 80, 20)
+COLOR_STATUS_BG_WARNING = (80, 60, 20)
+COLOR_STATUS_BG_LOADING = (20, 50, 80)
+COLOR_STATUS_BG_INFO = (30, 30, 80)
+
 # ============================================================================
 # ENTITY PARAMETERS
 # ============================================================================
 
 # Player
 PLAYER_RADIUS = 15
-PLAYER_MAX_HEALTH = 100
+PLAYER_MAX_HEALTH = 150
 PLAYER_SPEED = 5.0  # For directional movement (style 2)
 PLAYER_ROTATION_SPEED = 5.0  # Degrees per frame (style 1)
 PLAYER_THRUST = 0.3  # Acceleration (style 1)
@@ -49,7 +61,7 @@ PLAYER_SHOOT_COOLDOWN = 10  # Frames between shots
 # Enemy
 ENEMY_RADIUS = 12
 ENEMY_HEALTH = 30
-ENEMY_SPEED = 2.5
+ENEMY_SPEED = 2.0
 ENEMY_DAMAGE = 10  # Damage on collision with player
 ENEMY_SHOOT_COOLDOWN = 60  # Frames between enemy shots
 ENEMY_SHOOT_PROBABILITY = 0.3  # Chance to shoot when cooldown ready
@@ -92,16 +104,34 @@ STEP_REWARD = 0.1  # Small reward for surviving each step
 # REWARD STRUCTURE
 # ============================================================================
 
-REWARD_ENEMY_DESTROYED = 10.0
-REWARD_SPAWNER_DESTROYED = 50.0
-REWARD_PHASE_COMPLETE = 100.0
-REWARD_DAMAGE_TAKEN = -5.0
-REWARD_DEATH = -100.0
-REWARD_STEP_SURVIVAL = 0.1
+REWARD_ENEMY_DESTROYED = 5.0
+REWARD_SPAWNER_DESTROYED = 150.0
+REWARD_PHASE_COMPLETE = 200.0
+REWARD_DAMAGE_TAKEN = -2.0
+REWARD_DEATH = -150.0  # Strong penalty to discourage risky behavior
+REWARD_STEP_SURVIVAL = 0.0  # Small time penalty to discourage stalling
+
+# Dense rewards to help the agent learn aiming/shooting earlier.
+# These are awarded when a *player projectile hits* a target, even if it doesn't kill.
+# Keep them small relative to destroy rewards to preserve the main objective.
+REWARD_HIT_ENEMY = 2.0
+REWARD_HIT_SPAWNER = 10.0
+
+# Optional small penalty for firing a shot (applied only when a shot is actually fired).
+# Default 0.0 to avoid discouraging exploration in early training.
+REWARD_SHOT_FIRED = 0.0
 
 # Shaping rewards (optional but encouraged)
-REWARD_APPROACH_SPAWNER = 1.0  # For getting closer to nearest spawner
-REWARD_QUICK_SPAWNER_KILL = 5.0  # Bonus for destroying spawner efficiently
+REWARD_APPROACH_SPAWNER = 0.1  # Used only for SHAPING_MODE="binary"
+REWARD_QUICK_SPAWNER_KILL = 50.0  # Bonus for destroying spawner efficiently
+
+# Reward shaping configuration (rollback-friendly)
+# - "off": disable shaping
+# - "binary": reward REWARD_APPROACH_SPAWNER if closer than previous step
+# - "delta": reward proportional to normalized distance delta (can be negative), clipped
+SHAPING_MODE = "delta"
+SHAPING_SCALE = 3.0   # scale for "delta" (reduced from 20.0 to avoid overshadowing goal rewards)
+SHAPING_CLIP = 0.3   # per-step clip after scaling for "delta"
 
 # ============================================================================
 # OBSERVATION SPACE (14 dimensions)
@@ -157,11 +187,11 @@ ACTIONS_STYLE_2 = {
 
 # DQN Architecture
 DQN_HIDDEN_LAYERS = [256, 128, 64]
-DQN_ACTIVATION = "relu"
+DQN_ACTIVATION = "SiLU"
 
 # PPO Architecture
 PPO_NET_ARCH = [dict(pi=[256, 128, 64], vf=[256, 128, 64])]
-PPO_ACTIVATION = "relu"
+PPO_ACTIVATION = "SiLU"
 
 # ============================================================================
 # TRAINING HYPERPARAMETERS - DQN (CPU/Single Environment)
@@ -210,7 +240,7 @@ PPO_HYPERPARAMS = {
     "gamma": 0.99,
     "gae_lambda": 0.95,
     "clip_range": 0.2,
-    "ent_coef": 0.01,  # Entropy coefficient for exploration
+    "ent_coef": 0.01,  # Entropy coefficient (reduced from 0.1 for better convergence)
     "vf_coef": 0.5,
     "max_grad_norm": 0.5,
     "verbose": 1,
@@ -225,7 +255,7 @@ PPO_HYPERPARAMS_GPU = {
     "gamma": 0.99,
     "gae_lambda": 0.95,
     "clip_range": 0.2,
-    "ent_coef": 0.01,
+    "ent_coef": 0.01,  # Reduced from 0.1 for better convergence
     "vf_coef": 0.5,
     "max_grad_norm": 0.5,
     "verbose": 1,
@@ -237,8 +267,8 @@ PPO_HYPERPARAMS_GPU = {
 
 # Number of parallel environments to use by default for each device type
 NUM_ENVS_DEFAULT_MPS = 4   # Mac Silicon (MPS) - balanced for memory
-NUM_ENVS_DEFAULT_CUDA = 8  # NVIDIA GPU - can handle more environments
-NUM_ENVS_DEFAULT_CPU = 2   # CPU - limited parallelization
+NUM_ENVS_DEFAULT_CUDA = 20  # NVIDIA GPU - upper bound; train script will pick a CPU-aware default <= this
+NUM_ENVS_DEFAULT_CPU = 12   # CPU - limited parallelization
 
 # ============================================================================
 # TENSORBOARD & LOGGING

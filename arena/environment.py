@@ -55,8 +55,10 @@ class ArenaEnv(gym.Env):
         
         # Initialize renderer if needed
         self.renderer = None
+        self._owns_renderer = False
         if render_mode == "human":
             self.renderer = ArenaRenderer()
+            self._owns_renderer = True
         
         # Game state
         self.player = None
@@ -70,10 +72,17 @@ class ArenaEnv(gym.Env):
         self.enemies_destroyed = 0
         self.spawners_destroyed = 0
         self.episode_reward = 0
+        self.win = False
+        self.win_step = None
+        self.first_spawner_kill_step = None
         
         # For reward shaping
         self.previous_spawner_distance = None
         self.phase_start_step = 0
+        self.reward_step_survival = float(config.REWARD_STEP_SURVIVAL)
+        self.shaping_mode = str(config.SHAPING_MODE)
+        self.shaping_scale = float(config.SHAPING_SCALE)
+        self.shaping_clip = float(config.SHAPING_CLIP)
         
     def reset(self, seed=None, options=None):
         """Reset environment to initial state"""
@@ -86,6 +95,9 @@ class ArenaEnv(gym.Env):
         self.spawners_destroyed = 0
         self.episode_reward = 0
         self.phase_start_step = 0
+        self.win = False
+        self.win_step = None
+        self.first_spawner_kill_step = None
         
         # Create player at center
         self.player = Player(config.GAME_WIDTH / 2, config.GAME_HEIGHT / 2)
@@ -120,6 +132,8 @@ class ArenaEnv(gym.Env):
         if ((self.control_style == 1 and action == 4) or 
             (self.control_style == 2 and action == 5)):
             if self.player.shoot():
+                # Optional reward/penalty for actually firing a shot (configurable)
+                reward += float(getattr(config, "REWARD_SHOT_FIRED", 0.0))
                 # Create projectile
                 proj = Projectile(
                     self.player.pos[0], 
@@ -166,7 +180,7 @@ class ArenaEnv(gym.Env):
         reward += self._handle_collisions()
         
         # Survival reward
-        reward += config.REWARD_STEP_SURVIVAL
+        reward += self.reward_step_survival
         
         # Reward shaping: encourage approaching spawners
         reward += self._calculate_shaping_reward()
@@ -185,6 +199,8 @@ class ArenaEnv(gym.Env):
                 self._init_phase()
             else:
                 # Game won!
+                self.win = True
+                self.win_step = self.current_step
                 done = True
         
         # Check for death
@@ -225,17 +241,21 @@ class ArenaEnv(gym.Env):
             }
             self.renderer.render(self, metrics)
         
-        # Handle pygame events to prevent freezing
-        import pygame
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                self.close()
+        # Keep the OS window responsive without consuming events.
+        # (Interactive evaluation loops handle QUIT/keys themselves.)
+        try:
+            pygame.event.pump()
+        except pygame.error:
+            pass
     
     def close(self):
         """Clean up resources"""
-        if self.renderer:
+        # Only close pygame if this env created/owns the renderer.
+        # In interactive evaluation we often inject a shared renderer.
+        if self.renderer and self._owns_renderer:
             self.renderer.close()
-            self.renderer = None
+        self.renderer = None
+        self._owns_renderer = False
     
     def _init_phase(self):
         """Initialize a new phase with spawners"""
@@ -305,10 +325,11 @@ class ArenaEnv(gym.Env):
         if nearest_enemy:
             dist = utils.distance(self.player.pos, nearest_enemy.pos)
             angle = utils.angle_to_point(self.player.pos, nearest_enemy.pos)
+            rel_angle = utils.relative_angle(self.player.rotation, angle)
             
             max_dist = math.sqrt(config.GAME_WIDTH**2 + config.GAME_HEIGHT**2)
             obs[7] = dist / max_dist  # Distance (normalized 0-1)
-            obs[8] = utils.normalize_angle(angle)  # Angle (normalized 0-1)
+            obs[8] = utils.normalize_angle(rel_angle)  # Angle (normalized 0-1)
             obs[9] = 1.0  # Enemy exists
         else:
             obs[7] = 1.0  # Max distance
@@ -320,10 +341,11 @@ class ArenaEnv(gym.Env):
         if nearest_spawner:
             dist = utils.distance(self.player.pos, nearest_spawner.pos)
             angle = utils.angle_to_point(self.player.pos, nearest_spawner.pos)
+            rel_angle = utils.relative_angle(self.player.rotation, angle)
             
             max_dist = math.sqrt(config.GAME_WIDTH**2 + config.GAME_HEIGHT**2)
             obs[10] = dist / max_dist  # Distance (normalized 0-1)
-            obs[11] = utils.normalize_angle(angle)  # Angle (normalized 0-1)
+            obs[11] = utils.normalize_angle(rel_angle)  # Angle (normalized 0-1)
             obs[12] = 1.0  # Spawner exists
         else:
             obs[10] = 1.0  # Max distance
@@ -364,6 +386,8 @@ class ArenaEnv(gym.Env):
                 ):
                     enemy.take_damage(proj.damage)
                     proj.hit()
+                    # Dense reward for a successful hit (even if not lethal)
+                    reward += float(getattr(config, "REWARD_HIT_ENEMY", 0.0))
                     
                     if not enemy.alive:
                         reward += config.REWARD_ENEMY_DESTROYED
@@ -381,10 +405,14 @@ class ArenaEnv(gym.Env):
                 ):
                     spawner.take_damage(proj.damage)
                     proj.hit()
+                    # Dense reward for a successful hit (even if not lethal)
+                    reward += float(getattr(config, "REWARD_HIT_SPAWNER", 0.0))
                     
                     if not spawner.alive:
                         reward += config.REWARD_SPAWNER_DESTROYED
                         self.spawners_destroyed += 1
+                        if self.first_spawner_kill_step is None:
+                            self.first_spawner_kill_step = self.current_step
                         
                         # Bonus for quick kill
                         steps_in_phase = self.current_step - self.phase_start_step
@@ -419,27 +447,45 @@ class ArenaEnv(gym.Env):
         return reward
     
     def _calculate_shaping_reward(self):
-        """Calculate reward shaping for approaching spawners"""
-        if len(self.spawners) == 0:
+        """
+        Reward shaping for approaching spawners.
+
+        Modes:
+        - off: no shaping
+        - binary: reward a small constant if closer than previous step
+        - delta: reward proportional to normalized distance delta (can be negative), clipped
+        """
+        mode = str(self.shaping_mode).lower().strip()
+        if mode == "off":
             return 0.0
-        
+
+        if len(self.spawners) == 0:
+            self.previous_spawner_distance = None
+            return 0.0
+
         nearest_spawner = self._find_nearest_entity(self.spawners)
         if nearest_spawner is None:
+            self.previous_spawner_distance = None
             return 0.0
-        
+
         current_dist = utils.distance(self.player.pos, nearest_spawner.pos)
-        
-        if self.previous_spawner_distance is not None:
-            # Reward for getting closer
-            if current_dist < self.previous_spawner_distance:
-                reward = config.REWARD_APPROACH_SPAWNER
-            else:
-                reward = 0.0
-        else:
-            reward = 0.0
-        
+
+        if self.previous_spawner_distance is None:
+            self.previous_spawner_distance = current_dist
+            return 0.0
+
+        prev = float(self.previous_spawner_distance)
         self.previous_spawner_distance = current_dist
-        return reward
+
+        if mode == "binary":
+            return float(config.REWARD_APPROACH_SPAWNER) if current_dist < prev else 0.0
+
+        # Default: delta shaping
+        max_dist = math.sqrt(config.GAME_WIDTH**2 + config.GAME_HEIGHT**2)
+        delta_norm = (prev - current_dist) / max_dist  # >0 if moved closer
+        shaped = self.shaping_scale * float(delta_norm)
+        shaped = float(np.clip(shaped, -self.shaping_clip, self.shaping_clip))
+        return shaped
     
     def _get_info(self):
         """Get additional info dict"""
@@ -449,4 +495,10 @@ class ArenaEnv(gym.Env):
             'spawners_destroyed': self.spawners_destroyed,
             'player_health': self.player.health,
             'episode_reward': self.episode_reward,
+            'episode_steps': self.current_step,
+            'steps_in_phase': self.current_step - self.phase_start_step,
+            'win': bool(self.win),
+            'win_step': -1 if self.win_step is None else int(self.win_step),
+            'first_spawner_kill_step': -1 if self.first_spawner_kill_step is None else int(self.first_spawner_kill_step),
+            'shaping_mode': str(self.shaping_mode),
         }
