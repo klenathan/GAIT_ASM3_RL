@@ -55,6 +55,8 @@ class ArenaEnv(gym.Env):
         self.current_phase = 0
         self.enemies_destroyed = 0
         self.spawners_destroyed = 0
+        self.enemies_destroyed_this_step = 0
+        self.spawners_destroyed_this_step = 0
         self.episode_reward = 0
         self.win = False
         self.win_step = None
@@ -70,6 +72,8 @@ class ArenaEnv(gym.Env):
         self.current_phase = 0
         self.enemies_destroyed = 0
         self.spawners_destroyed = 0
+        self.enemies_destroyed_this_step = 0
+        self.spawners_destroyed_this_step = 0
         self.episode_reward = 0
         self.phase_start_step = 0
         self.win = False
@@ -89,6 +93,10 @@ class ArenaEnv(gym.Env):
         self.current_step += 1
         reward = 0.0
         done = False
+        
+        # Reset step-level counters
+        self.enemies_destroyed_this_step = 0
+        self.spawners_destroyed_this_step = 0
         
         if self.control_style == 1:
             self.player.update_style_1(action)
@@ -237,7 +245,10 @@ class ArenaEnv(gym.Env):
                 if enemy.alive and utils.check_collision(proj.pos, proj.radius, enemy.pos, enemy.radius):
                     enemy.take_damage(proj.damage); proj.hit()
                     reward += float(config.REWARD_HIT_ENEMY)
-                    if not enemy.alive: reward += config.REWARD_ENEMY_DESTROYED; self.enemies_destroyed += 1
+                    if not enemy.alive:
+                        reward += config.REWARD_ENEMY_DESTROYED
+                        self.enemies_destroyed += 1
+                        self.enemies_destroyed_this_step += 1
                     break
             if not proj.alive: continue
             for spawner in self.spawners:
@@ -245,7 +256,9 @@ class ArenaEnv(gym.Env):
                     spawner.take_damage(proj.damage); proj.hit()
                     reward += float(config.REWARD_HIT_SPAWNER)
                     if not spawner.alive:
-                        reward += config.REWARD_SPAWNER_DESTROYED; self.spawners_destroyed += 1
+                        reward += config.REWARD_SPAWNER_DESTROYED
+                        self.spawners_destroyed += 1
+                        self.spawners_destroyed_this_step += 1
                         if self.first_spawner_kill_step is None: self.first_spawner_kill_step = self.current_step
                         if (self.current_step - self.phase_start_step) < 500: reward += config.REWARD_QUICK_SPAWNER_KILL
                     break
@@ -258,7 +271,9 @@ class ArenaEnv(gym.Env):
         for enemy in self.enemies:
             if enemy.alive and self.player.alive and utils.check_collision(enemy.pos, enemy.radius, self.player.pos, self.player.radius):
                 self.player.take_damage(config.ENEMY_DAMAGE); enemy.take_damage(enemy.max_health); reward += config.REWARD_DAMAGE_TAKEN
-                if not enemy.alive: self.enemies_destroyed += 1
+                if not enemy.alive:
+                    self.enemies_destroyed += 1
+                    self.enemies_destroyed_this_step += 1
         return reward
     
     def _calculate_shaping_reward(self):
@@ -271,16 +286,22 @@ class ArenaEnv(gym.Env):
         prev = self.previous_spawner_distance
         self.previous_spawner_distance = dist
         if config.SHAPING_MODE == "binary":
-            return float(config.REWARD_APPROACH_SPAWNER) if dist < prev else 0.0
+            return float(config.SHAPING_SCALE) if dist < prev else 0.0
         max_dist = math.sqrt(config.GAME_WIDTH**2 + config.GAME_HEIGHT**2)
         delta = (prev - dist) / max_dist
         return float(np.clip(config.SHAPING_SCALE * delta, -config.SHAPING_CLIP, config.SHAPING_CLIP))
     
     def _get_info(self):
         return {
-            'phase': self.current_phase, 'enemies_destroyed': self.enemies_destroyed,
-            'spawners_destroyed': self.spawners_destroyed, 'player_health': self.player.health,
-            'episode_reward': self.episode_reward, 'episode_steps': self.current_step,
-            'win': bool(self.win), 'win_step': self.win_step or -1,
+            'phase': self.current_phase,
+            'enemies_destroyed': self.enemies_destroyed_this_step,  # Incremental this step
+            'spawners_destroyed': self.spawners_destroyed_this_step,  # Incremental this step
+            'total_enemies_destroyed': self.enemies_destroyed,  # Cumulative episode total
+            'total_spawners_destroyed': self.spawners_destroyed,  # Cumulative episode total
+            'player_health': self.player.health,
+            'episode_reward': self.episode_reward,
+            'episode_steps': self.current_step,
+            'win': bool(self.win),
+            'win_step': self.win_step or -1,
             'first_spawner_kill_step': self.first_spawner_kill_step or -1,
         }

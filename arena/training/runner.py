@@ -6,9 +6,7 @@ from arena.core.config import TrainerConfig
 from arena.training.registry import AlgorithmRegistry
 
 # Import algorithms to ensure registration
-import arena.training.algorithms.dqn
-import arena.training.algorithms.ppo
-import arena.training.algorithms.ppo_lstm
+import arena.training.algorithms
 
 class TrainerRunner:
     """Orchestrates the training process based on configuration."""

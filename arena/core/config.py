@@ -83,16 +83,16 @@ REWARD_SPAWNER_DESTROYED = 150.0
 REWARD_PHASE_COMPLETE = 200.0
 REWARD_DAMAGE_TAKEN = -2.0
 REWARD_DEATH = -150.0
-REWARD_STEP_SURVIVAL = 0.0
+REWARD_STEP_SURVIVAL = 0.02  # Small positive reward for staying alive
 REWARD_HIT_ENEMY = 2.0
 REWARD_HIT_SPAWNER = 10.0
 REWARD_SHOT_FIRED = 0.0
 REWARD_QUICK_SPAWNER_KILL = 50.0
 
 # Reward Shaping
-SHAPING_MODE = "delta"
-SHAPING_SCALE = 3.0
-SHAPING_CLIP = 0.3
+SHAPING_MODE = "binary"  # Simpler selection
+SHAPING_SCALE = 1.0
+SHAPING_CLIP = 0.1
 
 # Parallel Environments
 NUM_ENVS_DEFAULT_MPS = 4
@@ -172,16 +172,16 @@ class PPOHyperparams:
 
 @dataclass
 class A2CHyperparams:
-    learning_rate: float = 7e-4
-    n_steps: int = 5
+    learning_rate: float = 2.5e-4
+    n_steps: int = 128  # Much longer rollouts for credit assignment
     gamma: float = 0.99
     gae_lambda: float = 1.0
-    ent_coef: float = 0.01
+    ent_coef: float = 0.05  # Higher entropy for better exploration
     vf_coef: float = 0.5
     max_grad_norm: float = 0.5
     rms_prop_eps: float = 1e-5
     use_rms_prop: bool = True
-    normalize_advantage: bool = False
+    normalize_advantage: bool = True  # Stabilizes training
     verbose: int = 1
 
 @dataclass
@@ -208,4 +208,4 @@ PPO_LSTM_DEFAULT = PPOLSTMHyperparams()
 PPO_LSTM_GPU_DEFAULT = PPOLSTMHyperparams(batch_size=64)
 
 A2C_DEFAULT = A2CHyperparams()
-A2C_GPU_DEFAULT = A2CHyperparams(n_steps=8)
+A2C_GPU_DEFAULT = A2CHyperparams(n_steps=256)

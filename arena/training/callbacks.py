@@ -80,18 +80,25 @@ class ArenaCallback(BaseCallback):
             self.current_episode_spawners[i] = 0
 
         # Persistent recording (ensures metrics appear in every TB dump)
+        # Mean metrics (only available after at least one episode finishes)
         if len(self.episode_rewards) > 0:
             self.logger.record("arena/ep_rew_mean", float(np.mean(self.episode_rewards)))
             self.logger.record("arena/ep_len_mean", float(np.mean(self.episode_lengths)))
             self.logger.record("arena/ep_enemies_mean", float(np.mean(self.episode_enemies)))
             self.logger.record("arena/ep_spawners_mean", float(np.mean(self.episode_spawners)))
-            
-        if len(self.episode_wins) > 0:
             self.logger.record("arena/win_rate_100ep", float(np.mean(self.episode_wins)))
+            self.logger.record("arena/ep_enemies_last", self.episode_enemies[-1])
+            self.logger.record("arena/ep_spawners_last", self.episode_spawners[-1])
 
-        self.logger.record("arena/max_phase_reached", self.max_phase_reached)
+        # Current episode progress (averaged across all environments)
+        self.logger.record("arena/cur_ep_enemies", float(np.mean(self.current_episode_enemies)))
+        self.logger.record("arena/cur_ep_spawners", float(np.mean(self.current_episode_spawners)))
+        self.logger.record("arena/cur_ep_rew", float(np.mean(self.current_episode_reward)))
+
+        # Global totals
         self.logger.record("arena/total_enemies_destroyed", self.enemies_destroyed_total)
         self.logger.record("arena/total_spawners_destroyed", self.spawners_destroyed_total)
+        self.logger.record("arena/max_phase_reached", self.max_phase_reached)
 
         return True
 

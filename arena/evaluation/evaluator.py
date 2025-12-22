@@ -6,8 +6,6 @@ import os
 import pygame
 import numpy as np
 import torch
-from stable_baselines3 import DQN, PPO
-from sb3_contrib import RecurrentPPO
 
 from arena.core.config import TrainerConfig
 from arena.core.device import DeviceManager
@@ -15,6 +13,8 @@ from arena.core import config
 from arena.core.environment import ArenaEnv
 from arena.ui.renderer import ArenaRenderer
 from arena.ui.menu import Menu
+from arena.training.registry import AlgorithmRegistry
+from arena.training.algorithms import dqn, ppo, ppo_lstm, a2c
 
 class Evaluator:
     """Handles model evaluation with visualization."""
@@ -35,9 +35,11 @@ class Evaluator:
     def _infer_algo(self, model_path: str) -> str:
         """Infer algorithm type from filename."""
         name = os.path.basename(model_path).lower()
-        if "ppo_lstm" in name: return "ppo_lstm"
-        if "ppo" in name: return "ppo"
-        if "dqn" in name: return "dqn"
+        # Sort by length descending to match longest name first (e.g. ppo_lstm before ppo)
+        algos = sorted(AlgorithmRegistry.list_algorithms(), key=len, reverse=True)
+        for algo in algos:
+            if algo in name:
+                return algo
         return "ppo" # Default fallback
 
     def load_model(self, model_path: str, algo: str = None):
@@ -47,21 +49,22 @@ class Evaluator:
             
         print(f"Loading model: {model_path} (Algo: {algo})")
         
-        algo_class = PPO if algo == "ppo" else (RecurrentPPO if algo == "ppo_lstm" else DQN)
-        self.is_recurrent = algo == "ppo_lstm"
-        
         try:
+            trainer_class = AlgorithmRegistry.get(algo)
+            algo_class = trainer_class.algorithm_class
             self.model = algo_class.load(model_path, device=self.device)
+            self.is_recurrent = "Lstm" in trainer_class.policy_type
             return True
         except Exception as e:
             print(f"Failed to load as {algo}: {e}")
             # Try other loaders
-            for other_algo in ["ppo", "ppo_lstm", "dqn"]:
+            for other_algo in AlgorithmRegistry.list_algorithms():
                 if other_algo == algo: continue
                 try:
-                    other_class = PPO if other_algo == "ppo" else (RecurrentPPO if other_algo == "ppo_lstm" else DQN)
-                    self.model = other_class.load(model_path, device=self.device)
-                    self.is_recurrent = other_algo == "ppo_lstm"
+                    trainer_class = AlgorithmRegistry.get(other_algo)
+                    algo_class = trainer_class.algorithm_class
+                    self.model = algo_class.load(model_path, device=self.device)
+                    self.is_recurrent = "Lstm" in trainer_class.policy_type
                     print(f"Successfully loaded as {other_algo}")
                     return True
                 except: continue

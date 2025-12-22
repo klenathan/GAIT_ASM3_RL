@@ -11,6 +11,7 @@ import torch
 from stable_baselines3.common.base_class import BaseAlgorithm
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
+from stable_baselines3.common.monitor import Monitor
 
 from arena.core.config import TrainerConfig
 from arena.core.device import DeviceManager
@@ -54,7 +55,10 @@ class BaseTrainer(ABC):
     def _make_env_fn(self):
         """Environment factory."""
         render_mode = "human" if self.config.render else None
-        return lambda: ArenaEnv(control_style=self.config.style, render_mode=render_mode)
+        def _init():
+            env = ArenaEnv(control_style=self.config.style, render_mode=render_mode)
+            return Monitor(env)
+        return _init
 
     def create_environment(self) -> None:
         """Create vectorized training environment."""
@@ -79,20 +83,20 @@ class BaseTrainer(ABC):
 
     def setup_callbacks(self, hparams: Dict[str, Any]) -> None:
         """Setup training callbacks."""
-        # checkpoint_dir = os.path.join(
-        #     self.config.model_save_dir, 
-        #     self.config.algo, 
-        #     f"style{self.config.style}"
-        # )
-        # os.makedirs(checkpoint_dir, exist_ok=True)
+        checkpoint_dir = os.path.join(
+            self.config.model_save_dir, 
+            self.config.algo, 
+            f"style{self.config.style}"
+        )
+        os.makedirs(checkpoint_dir, exist_ok=True)
         
-        # checkpoint = CheckpointCallback(
-        #     save_freq=self.config.checkpoint_freq,
-        #     save_path=checkpoint_dir,
-        #     name_prefix=self.run_name,
-        #     save_replay_buffer=self.config.save_replay_buffer,
-        #     save_vecnormalize=self.config.save_vecnormalize,
-        # )
+        checkpoint = CheckpointCallback(
+            save_freq=self.config.checkpoint_freq,
+            save_path=checkpoint_dir,
+            name_prefix=self.run_name,
+            save_replay_buffer=self.config.save_replay_buffer,
+            save_vecnormalize=self.config.save_vecnormalize,
+        )
         
         # Prepare flat hparams for TensorBoard
         tb_hparams = {
@@ -134,8 +138,8 @@ class BaseTrainer(ABC):
         # We want to log roughly every 2000-5000 steps.
         # SB3 logs every (n_steps * num_envs * log_interval) steps.
         rollout_size = self.env.num_envs * hyperparams.get("n_steps", 1)
-        # Default target of ~2000 steps per log point
-        target_log_steps = 2000
+        # Default target of ~1000 steps per log point
+        target_log_steps = 1000
         log_interval = max(1, target_log_steps // rollout_size)
         
         print(f"Starting training: {self.run_name} (log_interval={log_interval})")

@@ -5,6 +5,8 @@ In-game menu for evaluation configuration.
 import pygame
 import os
 from arena.core import config
+from arena.training.registry import AlgorithmRegistry
+from arena.training.algorithms import dqn, ppo, ppo_lstm, a2c
 
 class Menu:
     """In-game menu for evaluation configuration."""
@@ -16,12 +18,12 @@ class Menu:
         self.small_font = pygame.font.Font(None, 24)
         
         self.models_dir = config.MODEL_SAVE_DIR
+        self.algos = AlgorithmRegistry.list_algorithms()
+        self.selected_algo_idx = 0
+        
         self.models = self._scan_models()
         self.selected_model_idx = 0
         self.scroll_offset = 0
-        
-        self.algos = ["ppo", "ppo_lstm", "dqn"]
-        self.selected_algo_idx = 0
         
         self.styles = [1, 2]
         self.selected_style_idx = 0
@@ -55,7 +57,7 @@ class Menu:
         if not os.path.exists(self.models_dir):
             return []
         
-        for algo in ["ppo", "ppo_lstm", "dqn"]:
+        for algo in self.algos:
             for style in [1, 2]:
                 style_dir = os.path.join(self.models_dir, algo, f"style{style}")
                 if not os.path.exists(style_dir):

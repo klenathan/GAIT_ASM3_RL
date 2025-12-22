@@ -35,5 +35,5 @@ class AlgorithmRegistry:
     
     @classmethod
     def list_algorithms(cls) -> List[str]:
-        """List all registered algorithm names."""
-        return list(cls._trainers.keys())
+        """List all registered algorithm names sorted alphabetically."""
+        return sorted(list(cls._trainers.keys()))

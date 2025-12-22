@@ -1,1 +1,4 @@
-from arena.training.algorithms import dqn, ppo, ppo_lstm, a2c
+from . import dqn
+from . import ppo
+from . import ppo_lstm
+from . import a2c
