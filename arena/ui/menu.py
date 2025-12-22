@@ -21,7 +21,8 @@ class Menu:
         self.algos = AlgorithmRegistry.list_algorithms()
         self.selected_algo_idx = 0
         
-        self.models = self._scan_models()
+        self.all_models = self._scan_models()  # Store all models
+        self.models = []  # Filtered models to display
         self.selected_model_idx = 0
         self.scroll_offset = 0
         
@@ -29,6 +30,10 @@ class Menu:
         self.selected_style_idx = 0
         
         self.deterministic = True
+        self.show_all_models = False  # Toggle for showing all vs filtered
+        
+        # Apply initial filter
+        self._filter_models()
         
         # UI Layout
         self.list_x = 50
@@ -76,6 +81,28 @@ class Menu:
         
         models.sort(key=lambda x: x["mtime"], reverse=True)
         return models
+    
+    def _filter_models(self):
+        """Filter models based on selected algorithm and style."""
+        if self.show_all_models:
+            self.models = self.all_models[:]
+        else:
+            selected_algo = self.algos[self.selected_algo_idx]
+            selected_style = self.styles[self.selected_style_idx]
+            self.models = [
+                m for m in self.all_models 
+                if m["algo"] == selected_algo and m["style"] == selected_style
+            ]
+        
+        # Reset selection when filter changes
+        self.selected_model_idx = 0
+        self.scroll_offset = 0
+    
+    def refresh_models(self):
+        """Rescan models directory and reapply filters."""
+        self.all_models = self._scan_models()
+        self._filter_models()
+        self.set_status(f"Refreshed: Found {len(self.all_models)} models", "info", duration=2000)
     
     def update(self, events):
         """Handle menu events."""
@@ -199,7 +226,7 @@ class Menu:
             pygame.draw.rect(self.screen, (100, 100, 150), (scrollbar_x, int(thumb_y), 10, int(thumb_height)))
             
         y = self.sidebar_y
-        self._draw_option_toggle(self.sidebar_x, y, "Algorithm:", self.algos[self.selected_algo_idx], 
+        self._draw_option_toggle(self.sidebar_x, y, "Algorithm:", self.algos[self.selected_algo_idx].upper(), 
                                 self.selected_algo_idx, len(self.algos), hovered=(self.hovered_button == "algo"))
         y += 60
         self._draw_option_toggle(self.sidebar_x, y, "Control Style:", f"Style {self.styles[self.selected_style_idx]}", 
@@ -208,7 +235,31 @@ class Menu:
         det_text = "Yes" if self.deterministic else "No"
         self._draw_option_toggle(self.sidebar_x, y, "Deterministic:", det_text, 
                                 0 if self.deterministic else 1, 2, hovered=(self.hovered_button == "deterministic"))
-        y += 80
+        y += 60
+        filter_text = "All Models" if self.show_all_models else "Filtered"
+        self._draw_option_toggle(self.sidebar_x, y, "Display Mode:", filter_text, 
+                                0 if self.show_all_models else 1, 2, hovered=(self.hovered_button == "show_all"))
+        y += 70
+        
+        # Draw Refresh Button
+        refresh_btn_rect = pygame.Rect(self.sidebar_x, y, 150, 40)
+        if self.hovered_button == "refresh":
+            btn_color = (70, 130, 200)
+            border_color = (255, 255, 255)
+        else:
+            btn_color = (50, 100, 150)
+            border_color = (150, 200, 255)
+        pygame.draw.rect(self.screen, btn_color, refresh_btn_rect)
+        pygame.draw.rect(self.screen, border_color, refresh_btn_rect, 2)
+        refresh_text = self.font.render("↻ Refresh", True, (255, 255, 255))
+        self.screen.blit(refresh_text, (self.sidebar_x + 25, y + 8))
+        y += 60
+        
+        # Model count indicator
+        count_text = f"Models: {len(self.models)}/{len(self.all_models)}"
+        count_surf = self.small_font.render(count_text, True, (150, 200, 255))
+        self.screen.blit(count_surf, (self.sidebar_x, y))
+        y += 40
         
         start_btn_rect = pygame.Rect(self.sidebar_x, 500, 150, 50)
         button_enabled = len(self.models) > 0
@@ -298,15 +349,22 @@ class Menu:
     
     def handle_sidebar_clicks(self, pos):
         x, y = pos
-        if not (self.sidebar_x <= x <= self.sidebar_x + 200):
+        if not (self.sidebar_x <= x <= self.sidebar_x + 250):
             return
         y_rel = y - self.sidebar_y
         if 0 <= y_rel <= 40:
             self.selected_algo_idx = (self.selected_algo_idx + 1) % len(self.algos)
+            self._filter_models()
         elif 60 <= y_rel <= 100:
             self.selected_style_idx = (self.selected_style_idx + 1) % len(self.styles)
+            self._filter_models()
         elif 120 <= y_rel <= 160:
             self.deterministic = not self.deterministic
+        elif 180 <= y_rel <= 220:
+            self.show_all_models = not self.show_all_models
+            self._filter_models()
+        elif 250 <= y_rel <= 290:
+            self.refresh_models()
     
     def set_status(self, message, status_type='info', duration=3000):
         self.status_message = message
@@ -331,7 +389,7 @@ class Menu:
         if self.sidebar_x <= x <= self.sidebar_x + 150 and 500 <= y <= 550:
             if len(self.models) > 0:
                 self.hovered_button = "start"
-        if self.sidebar_x <= x <= self.sidebar_x + 200:
+        if self.sidebar_x <= x <= self.sidebar_x + 250:
             y_rel = y - self.sidebar_y
             if 0 <= y_rel <= 40:
                 self.hovered_button = "algo"
@@ -339,3 +397,7 @@ class Menu:
                 self.hovered_button = "style"
             elif 120 <= y_rel <= 160:
                 self.hovered_button = "deterministic"
+            elif 180 <= y_rel <= 220:
+                self.hovered_button = "show_all"
+            elif 250 <= y_rel <= 290:
+                self.hovered_button = "refresh"

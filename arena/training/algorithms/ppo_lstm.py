@@ -9,6 +9,7 @@ from arena.training.base import BaseTrainer
 from arena.training.registry import AlgorithmRegistry
 from arena.core.config import PPO_LSTM_DEFAULT, PPO_LSTM_GPU_DEFAULT
 from arena.training.utils import resolve_activation_fn
+from arena.training.schedules import get_lr_schedule
 
 @AlgorithmRegistry.register("ppo_lstm")
 class PPOLSTMTrainer(BaseTrainer):
@@ -28,8 +29,16 @@ class PPOLSTMTrainer(BaseTrainer):
             hparams.n_steps
         )
         
+        # Build learning rate schedule
+        lr_schedule = get_lr_schedule(
+            schedule_type=self.config.lr_schedule,
+            lr_start=hparams.learning_rate,
+            lr_end=self.config.lr_end,
+            warmup_fraction=self.config.lr_warmup_fraction,
+        )
+        
         return {
-            "learning_rate": hparams.learning_rate,
+            "learning_rate": lr_schedule,
             "n_steps": hparams.n_steps,
             "batch_size": batch_size,
             "n_epochs": hparams.n_epochs,

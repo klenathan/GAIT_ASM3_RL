@@ -3,9 +3,12 @@ Model evaluation logic for Deep RL Arena.
 """
 
 import os
+import glob
 import pygame
 import numpy as np
 import torch
+
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
 from arena.core.config import TrainerConfig
 from arena.core.device import DeviceManager
@@ -13,6 +16,7 @@ from arena.core import config
 from arena.core.environment import ArenaEnv
 from arena.ui.renderer import ArenaRenderer
 from arena.ui.menu import Menu
+from arena.ui.model_output import ModelOutputExtractor
 from arena.training.registry import AlgorithmRegistry
 from arena.training.algorithms import dqn, ppo, ppo_lstm, a2c
 
@@ -26,6 +30,7 @@ class Evaluator:
         self.env = None
         self.model = None
         self.is_recurrent = False
+        self.output_extractor = ModelOutputExtractor()
         
     def setup_ui(self):
         """Initialize renderer and menu."""
@@ -70,18 +75,56 @@ class Evaluator:
                 except: continue
             return False
 
+    def _find_vecnormalize_stats(self, model_path: str) -> str:
+        """Find VecNormalize stats file matching the model."""
+        model_dir = os.path.dirname(model_path)
+        model_name = os.path.basename(model_path).replace('.zip', '')
+        
+        # Extract run prefix (e.g., ppo_style2_20251222_154509)
+        parts = model_name.split('_')
+        if len(parts) >= 4:
+            # Try to find matching vecnormalize file
+            run_prefix = '_'.join(parts[:4])  # algo_styleX_YYYYMMDD_HHMMSS
+            pattern = os.path.join(model_dir, f"{run_prefix}_vecnormalize*.pkl")
+            matches = sorted(glob.glob(pattern), reverse=True)  # Latest first
+            if matches:
+                return matches[0]
+        
+        # Fallback: find any vecnormalize file in the same directory
+        pattern = os.path.join(model_dir, "*vecnormalize*.pkl")
+        matches = sorted(glob.glob(pattern), reverse=True)
+        return matches[0] if matches else None
+
     def run_session(self, model_path: str, style: int, deterministic: bool = True):
         """Run a single evaluation session."""
         if not self.load_model(model_path):
             return "menu"
             
         if self.env: self.env.close()
-        self.env = ArenaEnv(control_style=style, render_mode=None)
-        self.env.render_mode = "human"
-        self.env.renderer = self.renderer
-        self.env._owns_renderer = False
         
-        obs, info = self.env.reset()
+        # Create base environment
+        base_env = ArenaEnv(control_style=style, render_mode=None)
+        base_env.render_mode = "human"
+        base_env.renderer = self.renderer
+        base_env._owns_renderer = False
+        
+        # Wrap in DummyVecEnv for VecNormalize compatibility
+        vec_env = DummyVecEnv([lambda: base_env])
+        
+        # Try to load VecNormalize stats
+        vecnorm_path = self._find_vecnormalize_stats(model_path)
+        if vecnorm_path and os.path.exists(vecnorm_path):
+            print(f"Loading VecNormalize stats: {vecnorm_path}")
+            self.env = VecNormalize.load(vecnorm_path, vec_env)
+            self.env.training = False  # Disable stats updates during eval
+            self.env.norm_reward = False  # Don't normalize rewards during eval
+        else:
+            print("No VecNormalize stats found, using raw observations")
+            self.env = vec_env
+        
+        obs = self.env.reset()
+        if isinstance(obs, tuple):
+            obs = obs[0]  # Handle new gym API
         lstm_states = None
         episode_start = np.array([True])
         
@@ -100,25 +143,42 @@ class Evaluator:
                     if event.key == pygame.K_v:
                         self.renderer.show_vision = not self.renderer.show_vision
             
-            # Predict action
+            # Predict action (obs is already an array from VecEnv)
             if self.is_recurrent:
                 action, lstm_states = self.model.predict(
                     obs, state=lstm_states, episode_start=episode_start, deterministic=deterministic
                 )
-                episode_start = np.array([False])
             else:
                 action, _ = self.model.predict(obs, deterministic=deterministic)
             
-            # Step
-            obs, reward, terminated, truncated, info = self.env.step(action)
+            # Get scalar action for visualization (VecEnv returns arrays)
+            action_scalar = action[0] if isinstance(action, np.ndarray) else action
+                
+            # Extract and visualize model output (use first element for single env)
+            output = self.output_extractor.extract(
+                self.model, obs[0], action_scalar, 
+                lstm_states=lstm_states, 
+                episode_start=episode_start
+            )
+            self.renderer.set_model_output(output, style)
             
-            if terminated or truncated:
-                obs, info = self.env.reset()
+            episode_start = np.array([False])
+            
+            # Step (VecEnv API: returns arrays, uses 'dones' not terminated/truncated)
+            obs, rewards, dones, infos = self.env.step(action)
+            
+            if dones[0]:
+                obs = self.env.reset()
+                if isinstance(obs, tuple):
+                    obs = obs[0]
                 lstm_states = None
                 episode_start = np.array([True])
             
-            # Render
-            self.env.render()
+            # Render - get underlying env from VecEnv wrapper
+            if hasattr(self.env, 'envs'):
+                self.env.envs[0].render()
+            elif hasattr(self.env, 'venv') and hasattr(self.env.venv, 'envs'):
+                self.env.venv.envs[0].render()
             
         return "menu"
 

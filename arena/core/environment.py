@@ -10,6 +10,7 @@ import math
 import pygame
 
 from arena.core import config
+from arena.core.curriculum import CurriculumManager, CurriculumStage
 from arena.game import utils
 from arena.game.entities import Player, Enemy, Spawner, Projectile
 from arena.ui.renderer import ArenaRenderer
@@ -25,11 +26,12 @@ class ArenaEnv(gym.Env):
     
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": config.FPS}
     
-    def __init__(self, control_style=1, render_mode=None):
+    def __init__(self, control_style=1, render_mode=None, curriculum_manager: CurriculumManager = None):
         super().__init__()
         
         self.control_style = control_style
         self.render_mode = render_mode
+        self.curriculum_manager = curriculum_manager
         
         if control_style == 1:
             self.action_space = spaces.Discrete(config.ACTION_SPACE_STYLE_1)
@@ -64,6 +66,13 @@ class ArenaEnv(gym.Env):
         
         self.previous_spawner_distance = None
         self.phase_start_step = 0
+    
+    @property
+    def curriculum_stage(self) -> CurriculumStage:
+        """Get current curriculum stage, or None if curriculum disabled."""
+        if self.curriculum_manager and self.curriculum_manager.enabled:
+            return self.curriculum_manager.current_stage
+        return None
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -119,11 +128,19 @@ class ArenaEnv(gym.Env):
                     self.projectiles.append(Projectile(enemy.pos[0], enemy.pos[1], angle, False))
         
         phase_cfg = config.PHASE_CONFIG[self.current_phase]
+        
+        # Apply curriculum modifiers
+        max_enemies = config.SPAWNER_MAX_ENEMIES
+        enemy_speed = phase_cfg['enemy_speed_mult']
+        if self.curriculum_stage:
+            max_enemies = int(max_enemies * self.curriculum_stage.max_enemies_mult)
+            enemy_speed *= self.curriculum_stage.enemy_speed_mult
+        
         for spawner in self.spawners:
             if spawner.alive:
                 spawner.update()
-                if spawner.can_spawn(len([e for e in self.enemies if e.alive])):
-                    new_enemy = spawner.spawn_enemy(self.np_random, phase_cfg['enemy_speed_mult'])
+                if spawner.can_spawn(len([e for e in self.enemies if e.alive]), max_enemies):
+                    new_enemy = spawner.spawn_enemy(self.np_random, enemy_speed)
                     if new_enemy: self.enemies.append(new_enemy)
         
         for proj in self.projectiles:
@@ -194,42 +211,138 @@ class ArenaEnv(gym.Env):
             y = config.GAME_HEIGHT / 2 + math.sin(angle) * dist
             x = utils.clamp(x, config.SPAWNER_RADIUS, config.GAME_WIDTH - config.SPAWNER_RADIUS)
             y = utils.clamp(y, config.SPAWNER_RADIUS, config.GAME_HEIGHT - config.SPAWNER_RADIUS)
-            self.spawners.append(Spawner(x, y, phase_cfg['spawn_rate_mult']))
+            
+            # Apply curriculum modifiers to spawner
+            spawn_rate_mult = phase_cfg['spawn_rate_mult']
+            health_mult = 1.0
+            if self.curriculum_stage:
+                spawn_rate_mult *= self.curriculum_stage.spawn_cooldown_mult
+                health_mult = self.curriculum_stage.spawner_health_mult
+            
+            spawner = Spawner(x, y, spawn_rate_mult)
+            if health_mult != 1.0:
+                spawner.health = int(spawner.max_health * health_mult)
+            self.spawners.append(spawner)
         
         self.phase_start_step = self.current_step
         self.previous_spawner_distance = None
     
     def _get_observation(self):
+        """Build expanded observation vector (32 dims)."""
         obs = np.zeros(config.OBS_DIM, dtype=np.float32)
+        max_dist = math.sqrt(config.GAME_WIDTH**2 + config.GAME_HEIGHT**2)
+        
+        # [0-1] Player position
         obs[0] = self.player.pos[0] / config.GAME_WIDTH
         obs[1] = self.player.pos[1] / config.GAME_HEIGHT
+        
+        # [2-3] Player velocity
         obs[2] = np.clip(self.player.velocity[0] / config.PLAYER_MAX_VELOCITY, -1, 1)
         obs[3] = np.clip(self.player.velocity[1] / config.PLAYER_MAX_VELOCITY, -1, 1)
-        obs[4] = self.player.rotation / (2 * math.pi)
-        obs[5] = self.player.get_health_ratio()
-        obs[6] = self.current_phase / config.MAX_PHASES
         
-        near_e = self._find_nearest_entity(self.enemies)
-        max_dist = math.sqrt(config.GAME_WIDTH**2 + config.GAME_HEIGHT**2)
-        if near_e:
-            obs[7] = utils.distance(self.player.pos, near_e.pos) / max_dist
-            obs[8] = utils.normalize_angle(utils.relative_angle(self.player.rotation, utils.angle_to_point(self.player.pos, near_e.pos)))
-            obs[9] = 1.0
-        else:
-            obs[7], obs[8], obs[9] = 1.0, 0.5, 0.0
-            
-        near_s = self._find_nearest_entity(self.spawners)
-        if near_s:
-            obs[10] = utils.distance(self.player.pos, near_s.pos) / max_dist
-            obs[11] = utils.normalize_angle(utils.relative_angle(self.player.rotation, utils.angle_to_point(self.player.pos, near_s.pos)))
-            obs[12] = 1.0
-        else:
-            obs[10], obs[11], obs[12] = 1.0, 0.5, 0.0
-            
-        obs[13] = len(self.enemies) / config.SPAWNER_MAX_ENEMIES
+        # [4] Player rotation
+        obs[4] = self.player.rotation / (2 * math.pi)
+        
+        # [5] Player health ratio
+        obs[5] = self.player.get_health_ratio()
+        
+        # [6] Shoot cooldown ratio (0 = ready to shoot)
+        obs[6] = self.player.shoot_cooldown / config.PLAYER_SHOOT_COOLDOWN
+        
+        # [7] Current phase ratio
+        obs[7] = self.current_phase / config.MAX_PHASES
+        
+        # [8] Spawners remaining ratio (for current phase objectives)
+        initial_spawners = config.PHASE_CONFIG[self.current_phase]['spawners']
+        obs[8] = len([s for s in self.spawners if s.alive]) / max(initial_spawners, 1)
+        
+        # [9] Time remaining ratio
+        obs[9] = 1.0 - (self.current_step / config.MAX_STEPS)
+        
+        # [10-15] Nearest 2 enemies (dist, angle, exists) x2
+        nearest_enemies = self._find_k_nearest_entities(self.enemies, k=2)
+        for i, enemy in enumerate(nearest_enemies):
+            base_idx = 10 + i * 3
+            if enemy:
+                obs[base_idx] = utils.distance(self.player.pos, enemy.pos) / max_dist
+                obs[base_idx + 1] = utils.normalize_angle(
+                    utils.relative_angle(self.player.rotation, 
+                                        utils.angle_to_point(self.player.pos, enemy.pos)))
+                obs[base_idx + 2] = 1.0
+            else:
+                obs[base_idx], obs[base_idx + 1], obs[base_idx + 2] = 1.0, 0.5, 0.0
+        
+        # [16-23] Nearest 2 spawners (dist, angle, exists, health) x2
+        nearest_spawners = self._find_k_nearest_entities(self.spawners, k=2)
+        for i, spawner in enumerate(nearest_spawners):
+            base_idx = 16 + i * 4
+            if spawner:
+                obs[base_idx] = utils.distance(self.player.pos, spawner.pos) / max_dist
+                obs[base_idx + 1] = utils.normalize_angle(
+                    utils.relative_angle(self.player.rotation,
+                                        utils.angle_to_point(self.player.pos, spawner.pos)))
+                obs[base_idx + 2] = 1.0
+                obs[base_idx + 3] = spawner.health / spawner.max_health
+            else:
+                obs[base_idx], obs[base_idx + 1], obs[base_idx + 2], obs[base_idx + 3] = 1.0, 0.5, 0.0, 0.0
+        
+        # [24-26] Projectile threat info (nearest dist, angle, count nearby)
+        proj_dist, proj_angle, proj_count = self._get_projectile_threat_info()
+        obs[24] = proj_dist / max_dist
+        obs[25] = proj_angle
+        obs[26] = min(proj_count / 5.0, 1.0)  # Normalize, cap at 5 projectiles
+        
+        # [27-30] Wall distances (left, right, top, bottom) - normalized
+        obs[27] = self.player.pos[0] / config.GAME_WIDTH  # Distance from left
+        obs[28] = 1.0 - (self.player.pos[0] / config.GAME_WIDTH)  # Distance from right
+        obs[29] = self.player.pos[1] / config.GAME_HEIGHT  # Distance from top
+        obs[30] = 1.0 - (self.player.pos[1] / config.GAME_HEIGHT)  # Distance from bottom
+        
+        # [31] Enemy count
+        obs[31] = len([e for e in self.enemies if e.alive]) / config.SPAWNER_MAX_ENEMIES
+        
         return obs
     
+    def _find_k_nearest_entities(self, entities, k=2):
+        """Find k nearest entities, returns list padded with None if fewer exist."""
+        alive_entities = [(e, utils.distance(self.player.pos, e.pos)) 
+                          for e in entities if e.alive]
+        alive_entities.sort(key=lambda x: x[1])
+        
+        result = [e for e, _ in alive_entities[:k]]
+        # Pad with None if fewer than k entities
+        while len(result) < k:
+            result.append(None)
+        return result
+    
+    def _get_projectile_threat_info(self):
+        """Get info about threatening projectiles (enemy projectiles only)."""
+        max_dist = math.sqrt(config.GAME_WIDTH**2 + config.GAME_HEIGHT**2)
+        enemy_projectiles = [p for p in self.projectiles 
+                            if p.alive and not p.is_player_projectile]
+        
+        if not enemy_projectiles:
+            return max_dist, 0.5, 0  # Return max_dist, not inf
+        
+        # Find nearest
+        min_dist = float('inf')
+        nearest_angle = 0.5
+        for proj in enemy_projectiles:
+            dist = utils.distance(self.player.pos, proj.pos)
+            if dist < min_dist:
+                min_dist = dist
+                nearest_angle = utils.normalize_angle(
+                    utils.relative_angle(self.player.rotation,
+                                        utils.angle_to_point(self.player.pos, proj.pos)))
+        
+        # Count projectiles within danger radius
+        danger_count = sum(1 for p in enemy_projectiles 
+                          if utils.distance(self.player.pos, p.pos) < config.PROJECTILE_DANGER_RADIUS)
+        
+        return min_dist, nearest_angle, danger_count
+    
     def _find_nearest_entity(self, entities):
+        """Find single nearest entity (kept for backward compatibility)."""
         nearest, min_dist = None, float('inf')
         for e in entities:
             if e.alive:
@@ -285,11 +398,17 @@ class ArenaEnv(gym.Env):
             self.previous_spawner_distance = dist; return 0.0
         prev = self.previous_spawner_distance
         self.previous_spawner_distance = dist
+        
+        # Get shaping scale with curriculum modifier
+        shaping_scale = config.SHAPING_SCALE
+        if self.curriculum_stage:
+            shaping_scale *= self.curriculum_stage.shaping_scale_mult
+        
         if config.SHAPING_MODE == "binary":
-            return float(config.SHAPING_SCALE) if dist < prev else 0.0
+            return float(shaping_scale) if dist < prev else 0.0
         max_dist = math.sqrt(config.GAME_WIDTH**2 + config.GAME_HEIGHT**2)
         delta = (prev - dist) / max_dist
-        return float(np.clip(config.SHAPING_SCALE * delta, -config.SHAPING_CLIP, config.SHAPING_CLIP))
+        return float(np.clip(shaping_scale * delta, -config.SHAPING_CLIP, config.SHAPING_CLIP))
     
     def _get_info(self):
         return {

@@ -40,6 +40,18 @@ uv run python -m arena.train --algo ppo --style 2 --steps 100000
 uv run python -m arena.train --algo ppo_lstm --style 1
 ```
 
+### Resume / Transfer Learning (Model Loading)
+
+Resume training from an existing SB3 `.zip` checkpoint (same `--algo` and `--style`):
+
+```bash
+# Continue timesteps from the checkpoint (recommended for true resume)
+uv run python -m arena.train --algo ppo --style 1 --load-model ./models/ppo/style1/ppo_style1_20251221_173557_final.zip
+
+# If you want a fresh run counter while still loading weights/state
+uv run python -m arena.train --algo ppo --style 1 --load-model ./models/ppo/style1/ppo_style1_20251221_173557_final.zip --reset-timesteps
+```
+
 Monitor training with TensorBoard:
 ```bash
 tensorboard --logdir logs

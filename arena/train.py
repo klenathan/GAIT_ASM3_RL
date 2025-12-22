@@ -21,17 +21,33 @@ def parse_args():
     parser.add_argument("--tensorboard", action="store_true", default=True)
     parser.add_argument("--no-render", action="store_true", help="Disable rendering")
     parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda", "mps"])
+    parser.add_argument(
+        "--load-model",
+        type=str,
+        default=None,
+        help="Path to an SB3/SB3-Contrib .zip model to resume training from (same algo + style).",
+    )
+    parser.add_argument(
+        "--reset-timesteps",
+        action="store_true",
+        help="If set with --load-model, reset timesteps to 0 for the new run (otherwise continues).",
+    )
     return parser.parse_args()
 
 def main():
     args = parse_args()
+
+    # By default, new training resets timesteps; resume training continues timesteps unless overridden.
+    reset_num_timesteps = True if not args.load_model else args.reset_timesteps
     
     # Create config from args
     config = TrainerConfig(
         algo=args.algo,
         style=args.style,
         device=args.device,
-        render=not args.no_render
+        render=not args.no_render,
+        pretrained_model_path=args.load_model,
+        reset_num_timesteps=reset_num_timesteps,
     )
     
     # Overrides

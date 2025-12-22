@@ -9,6 +9,7 @@ from arena.training.base import BaseTrainer
 from arena.training.registry import AlgorithmRegistry
 from arena.core.config import A2C_DEFAULT, A2C_GPU_DEFAULT
 from arena.training.utils import resolve_activation_fn
+from arena.training.schedules import get_lr_schedule
 
 @AlgorithmRegistry.register("a2c")
 class A2CTrainer(BaseTrainer):
@@ -21,9 +22,17 @@ class A2CTrainer(BaseTrainer):
     def get_hyperparameters(self) -> Dict[str, Any]:
         """Get hyperparameters based on device."""
         hparams = A2C_GPU_DEFAULT if self._is_gpu() else A2C_DEFAULT
+        
+        # Build learning rate schedule
+        lr_schedule = get_lr_schedule(
+            schedule_type=self.config.lr_schedule,
+            lr_start=hparams.learning_rate,
+            lr_end=self.config.lr_end,
+            warmup_fraction=self.config.lr_warmup_fraction,
+        )
             
         return {
-            "learning_rate": hparams.learning_rate,
+            "learning_rate": lr_schedule,
             "n_steps": hparams.n_steps,
             "gamma": hparams.gamma,
             "gae_lambda": hparams.gae_lambda,

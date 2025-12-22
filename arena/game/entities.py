@@ -145,9 +145,11 @@ class Spawner:
         if self.spawn_cooldown > 0:
             self.spawn_cooldown -= 1
     
-    def can_spawn(self, current_enemy_count):
+    def can_spawn(self, current_enemy_count, max_enemies=None):
+        if max_enemies is None:
+            max_enemies = config.SPAWNER_MAX_ENEMIES
         return (self.spawn_cooldown == 0 and 
-                current_enemy_count < config.SPAWNER_MAX_ENEMIES)
+                current_enemy_count < max_enemies)
     
     def spawn_enemy(self, np_random=np.random, speed_multiplier=1.0):
         """Create a new enemy around the spawner."""

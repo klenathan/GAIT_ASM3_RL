@@ -21,7 +21,27 @@ GAME_HEIGHT = 800
 # Action and Observation Spaces
 ACTION_SPACE_STYLE_1 = 5  # Rotation, Thrust, Shoot
 ACTION_SPACE_STYLE_2 = 6  # Directional (4), Shoot
-OBS_DIM = 14             # Player pos (2), vel (2), rot (1), health (1), phase (1), near_e (3), near_s (3), enemy_count (1)
+
+# Observation Space Layout (28 dims total):
+# [0-1]   Player position (x, y)
+# [2-3]   Player velocity (vx, vy)
+# [4]     Player rotation
+# [5]     Player health ratio
+# [6]     Shoot cooldown ratio (0 = ready)
+# [7]     Current phase ratio
+# [8]     Spawners remaining ratio
+# [9]     Time remaining ratio
+# [10-12] Nearest enemy 1 (dist, angle, exists)
+# [13-15] Nearest enemy 2 (dist, angle, exists)
+# [16-19] Nearest spawner 1 (dist, angle, exists, health)
+# [20-23] Nearest spawner 2 (dist, angle, exists, health)
+# [24-26] Nearest projectile (dist, angle, count nearby)
+# [27-30] Wall distances (left, right, top, bottom)
+# [31]    Enemy count
+OBS_DIM = 32
+
+# Threat detection
+PROJECTILE_DANGER_RADIUS = 150  # Radius to count nearby projectiles
 
 
 # Colors
@@ -37,6 +57,15 @@ COLOR_HEALTH_MEDIUM = (255, 200, 50)
 COLOR_HEALTH_BAD = (255, 50, 50)
 COLOR_PANEL_BG = (20, 20, 40)
 COLOR_PANEL_BORDER = (100, 100, 150)
+
+# Model Output Visualization Colors
+COLOR_ACTION_BAR_HIGH = (50, 200, 100)    # Green - high probability
+COLOR_ACTION_BAR_LOW = (100, 100, 120)    # Dim - low probability
+COLOR_VALUE_POSITIVE = (100, 200, 255)    # Blue - positive value
+COLOR_VALUE_NEGATIVE = (255, 100, 100)    # Red - negative value
+COLOR_ACTION_SELECTED = (255, 255, 100)   # Yellow - selected action
+COLOR_ENTROPY_HIGH = (100, 255, 100)      # Green - high entropy (exploring)
+COLOR_ENTROPY_LOW = (255, 100, 100)       # Red - low entropy (confident)
 
 # Entity Parameters
 PLAYER_RADIUS = 15
@@ -83,16 +112,28 @@ REWARD_SPAWNER_DESTROYED = 150.0
 REWARD_PHASE_COMPLETE = 200.0
 REWARD_DAMAGE_TAKEN = -2.0
 REWARD_DEATH = -150.0
-REWARD_STEP_SURVIVAL = 0.02  # Small positive reward for staying alive
+REWARD_STEP_SURVIVAL = 0.005  # Reduced from 0.02 - engagement should dominate
 REWARD_HIT_ENEMY = 2.0
 REWARD_HIT_SPAWNER = 10.0
 REWARD_SHOT_FIRED = 0.0
 REWARD_QUICK_SPAWNER_KILL = 50.0
 
+# Activity Penalties (discourage passive/corner-hiding play)
+PENALTY_INACTIVITY = -0.05          # Per-step penalty when not moving enough
+PENALTY_CORNER = -0.1               # Per-step penalty when too close to edges
+CORNER_MARGIN = 80                  # Distance from edge to be considered "in corner"
+INACTIVITY_VELOCITY_THRESHOLD = 0.5 # Minimum velocity magnitude to be "active"
+
 # Reward Shaping
-SHAPING_MODE = "binary"  # Simpler selection
+SHAPING_MODE = "delta"  # Simpler selection
 SHAPING_SCALE = 1.0
 SHAPING_CLIP = 0.1
+
+# Curriculum Learning
+CURRICULUM_ENABLED = True
+CURRICULUM_ADVANCEMENT_THRESHOLD = 0.3  # Spawner kill rate to advance
+CURRICULUM_MIN_EPISODES = 50            # Min episodes before advancing
+CURRICULUM_WINDOW = 100                 # Episodes for averaging
 
 # Parallel Environments
 NUM_ENVS_DEFAULT_MPS = 4
@@ -120,9 +161,18 @@ class TrainerConfig:
     progress_bar: bool = True
     checkpoint_freq: int = 50_000
     save_replay_buffer: bool = False
-    save_vecnormalize: bool = False
+    save_vecnormalize: bool = True
     tensorboard_log_dir: str = TENSORBOARD_LOG_DIR
     model_save_dir: str = MODEL_SAVE_DIR
+    # Optional resume/transfer learning
+    pretrained_model_path: Optional[str] = None
+    # Whether to reset timesteps in SB3 learn(); when resuming, typically False
+    reset_num_timesteps: bool = True
+    
+    # Learning rate schedule
+    lr_schedule: str = "constant"  # "constant", "linear", "exponential", "cosine"
+    lr_end: Optional[float] = None  # Final LR; defaults to start_lr * 0.1
+    lr_warmup_fraction: float = 0.0  # Fraction of training for warmup (0 = none)
     
     # DQN specific
     dqn_hidden_layers: List[int] = field(default_factory=lambda: [256, 128, 64])
@@ -138,7 +188,7 @@ class TrainerConfig:
     ppo_lstm_n_layers: int = 1
     
     # A2C specific
-    a2c_net_arch: Dict[str, List[int]] = field(default_factory=lambda: dict(pi=[256, 128, 64], vf=[256, 128, 64]))
+    a2c_net_arch: Dict[str, List[int]] = field(default_factory=lambda: dict(pi=[256, 128, 128, 64], vf=[256, 128, 128, 64]))
     a2c_activation: str = "SiLU"
 
 @dataclass
@@ -158,15 +208,15 @@ class DQNHyperparams:
 
 @dataclass
 class PPOHyperparams:
-    learning_rate: float = 3e-5
+    learning_rate: float = 3e-4
     n_steps: int = 2048
     batch_size: int = 64
-    n_epochs: int = 10
+    n_epochs: int = 5
     gamma: float = 0.99
     gae_lambda: float = 0.95
     clip_range: float = 0.2
-    ent_coef: float = 0.03
-    vf_coef: float = 0.5
+    ent_coef: float = 0.005
+    vf_coef: float = 1.0
     max_grad_norm: float = 0.5
     verbose: int = 1
 
@@ -190,7 +240,7 @@ class PPOLSTMHyperparams(PPOHyperparams):
     n_steps: int = 512
     batch_size: int = 32
     n_epochs: int = 5
-    ent_coef: float = 0.01
+    ent_coef: float = 0.05
 
 # Default hyperparameter instances (equivalent to old config)
 DQN_DEFAULT = DQNHyperparams()

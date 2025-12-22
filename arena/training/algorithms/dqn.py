@@ -9,6 +9,7 @@ from arena.training.base import BaseTrainer
 from arena.training.registry import AlgorithmRegistry
 from arena.core.config import DQN_DEFAULT, DQN_GPU_DEFAULT
 from arena.training.utils import resolve_activation_fn
+from arena.training.schedules import get_lr_schedule
 
 @AlgorithmRegistry.register("dqn")
 class DQNTrainer(BaseTrainer):
@@ -22,9 +23,17 @@ class DQNTrainer(BaseTrainer):
         """Get hyperparameters based on device."""
         hparams = DQN_GPU_DEFAULT if self._is_gpu() else DQN_DEFAULT
         
+        # Build learning rate schedule
+        lr_schedule = get_lr_schedule(
+            schedule_type=self.config.lr_schedule,
+            lr_start=hparams.learning_rate,
+            lr_end=self.config.lr_end,
+            warmup_fraction=self.config.lr_warmup_fraction,
+        )
+        
         # Convert dataclass to dict for SB3
         return {
-            "learning_rate": hparams.learning_rate,
+            "learning_rate": lr_schedule,
             "buffer_size": hparams.buffer_size,
             "batch_size": hparams.batch_size,
             "gamma": hparams.gamma,

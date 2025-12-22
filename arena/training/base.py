@@ -5,18 +5,20 @@ Base Trainer class for Deep RL Arena.
 import os
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Dict, Any, Optional, Type, List
+from typing import Dict, Any, Optional, Type, List, Union
 
 import torch
 from stable_baselines3.common.base_class import BaseAlgorithm
-from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNormalize
 from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
 from stable_baselines3.common.monitor import Monitor
 
 from arena.core.config import TrainerConfig
+from arena.core import config as arena_config
 from arena.core.device import DeviceManager
 from arena.core.environment import ArenaEnv
-from arena.training.callbacks import ArenaCallback, PerformanceCallback, HParamCallback
+from arena.core.curriculum import CurriculumManager, CurriculumConfig, SpawnerKillRateStrategy
+from arena.training.callbacks import ArenaCallback, PerformanceCallback, HParamCallback, CurriculumCallback, LearningRateCallback
 
 class BaseTrainer(ABC):
     """
@@ -34,9 +36,20 @@ class BaseTrainer(ABC):
         self.run_name = f"{config.algo}_style{config.style}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         
         # Runtime components
-        self.env: Optional[Union[DummyVecEnv, SubprocVecEnv]] = None
+        self.env: Optional[Union[DummyVecEnv, SubprocVecEnv, VecNormalize]] = None
         self.model: Optional[BaseAlgorithm] = None
         self.callbacks: List[Any] = []
+        self.curriculum_manager: Optional[CurriculumManager] = None
+        
+        # Initialize curriculum if enabled
+        if arena_config.CURRICULUM_ENABLED:
+            strategy = SpawnerKillRateStrategy(
+                threshold=arena_config.CURRICULUM_ADVANCEMENT_THRESHOLD,
+                min_episodes=arena_config.CURRICULUM_MIN_EPISODES
+            )
+            self.curriculum_manager = CurriculumManager(
+                CurriculumConfig(enabled=True, strategy=strategy)
+            )
         
         # Initialize directories
         os.makedirs(self.config.model_save_dir, exist_ok=True)
@@ -55,8 +68,14 @@ class BaseTrainer(ABC):
     def _make_env_fn(self):
         """Environment factory."""
         render_mode = "human" if self.config.render else None
+        curriculum_manager = self.curriculum_manager
+        control_style = self.config.style
         def _init():
-            env = ArenaEnv(control_style=self.config.style, render_mode=render_mode)
+            env = ArenaEnv(
+                control_style=control_style, 
+                render_mode=render_mode,
+                curriculum_manager=curriculum_manager
+            )
             return Monitor(env)
         return _init
 
@@ -80,6 +99,18 @@ class BaseTrainer(ABC):
                 self.env = DummyVecEnv([self._make_env_fn() for _ in range(num_envs)])
         else:
             self.env = DummyVecEnv([self._make_env_fn()])
+        
+        # Wrap with VecNormalize for observation and reward normalization
+        # This is critical for stable PPO training with variable reward scales
+        self.env = VecNormalize(
+            self.env,
+            norm_obs=True,           # Normalize observations (running mean/std)
+            norm_reward=True,        # Normalize rewards (critical for value function!)
+            clip_obs=10.0,           # Clip extreme observations
+            clip_reward=10.0,        # Clip extreme rewards
+            gamma=0.99,              # Discount factor for reward normalization
+        )
+        print("VecNormalize wrapper enabled (obs + reward normalization)")
 
     def setup_callbacks(self, hparams: Dict[str, Any]) -> None:
         """Setup training callbacks."""
@@ -106,11 +137,57 @@ class BaseTrainer(ABC):
         }
         
         self.callbacks = CallbackList([
-            # checkpoint,  # Disabled checkpoint logging
+            checkpoint, 
             ArenaCallback(verbose=0),
             PerformanceCallback(verbose=0),
-            HParamCallback(tb_hparams)
+            HParamCallback(tb_hparams),
+            CurriculumCallback(self.curriculum_manager, verbose=1),
+            LearningRateCallback(verbose=0),
         ])
+
+    def _load_pretrained_model(
+        self,
+        hyperparams: Dict[str, Any],
+        policy_kwargs: Dict[str, Any],
+    ) -> BaseAlgorithm:
+        """Load a pretrained SB3 model and validate spaces for safe resuming."""
+        model_path = self.config.pretrained_model_path
+        if not model_path:
+            raise ValueError("pretrained_model_path is not set.")
+
+        print(f"\nLoading pretrained model from: {model_path}")
+
+        # Note: algorithm_class.load() restores weights and algorithm state; we attach the new env.
+        # We also set tensorboard_log so continuing training logs to the current run directory.
+        model = self.algorithm_class.load(
+            model_path,
+            env=self.env,
+            device=self.device,
+            tensorboard_log=self.config.tensorboard_log_dir,
+        )
+
+        # Validate action/observation spaces match the new env (required for resume).
+        if model.observation_space != self.env.observation_space:
+            raise ValueError(
+                "Loaded model observation_space does not match current environment. "
+                f"model={model.observation_space}, env={self.env.observation_space}. "
+                "Make sure you resume with the same control style and observation setup."
+            )
+        if model.action_space != self.env.action_space:
+            raise ValueError(
+                "Loaded model action_space does not match current environment. "
+                f"model={model.action_space}, env={self.env.action_space}. "
+                "Make sure you resume with the same algo and control style."
+            )
+
+        # If user changed hyperparams via CLI/config, apply the most important ones for continuing.
+        # (SB3 load() keeps saved hyperparams; we only override what the current config controls.)
+        if "learning_rate" in hyperparams:
+            model.learning_rate = hyperparams["learning_rate"]
+        if "policy_kwargs" in getattr(model, "__dict__", {}):
+            model.policy_kwargs = policy_kwargs
+
+        return model
 
     def train(self) -> BaseAlgorithm:
         """Main training loop."""
@@ -121,16 +198,23 @@ class BaseTrainer(ABC):
         hyperparams = self.get_hyperparameters()
         policy_kwargs = self.get_policy_kwargs()
         
-        print(f"\nInitializing {self.algorithm_name.upper()} model on {self.device}...")
-        
-        self.model = self.algorithm_class(
-            self.policy_type,
-            self.env,
-            policy_kwargs=policy_kwargs,
-            tensorboard_log=self.config.tensorboard_log_dir,
-            device=self.device,
-            **hyperparams
-        )
+        if self.config.pretrained_model_path:
+            # Resume/transfer learning: load existing model and attach the new env.
+            self.model = self._load_pretrained_model(hyperparams, policy_kwargs)
+            print(
+                f"Resuming training on {self.device} "
+                f"(reset_num_timesteps={self.config.reset_num_timesteps})..."
+            )
+        else:
+            print(f"\nInitializing {self.algorithm_name.upper()} model on {self.device}...")
+            self.model = self.algorithm_class(
+                self.policy_type,
+                self.env,
+                policy_kwargs=policy_kwargs,
+                tensorboard_log=self.config.tensorboard_log_dir,
+                device=self.device,
+                **hyperparams
+            )
         
         self.setup_callbacks(hyperparams)
         
@@ -148,7 +232,8 @@ class BaseTrainer(ABC):
             callback=self.callbacks,
             tb_log_name=self.run_name,
             progress_bar=self.config.progress_bar,
-            log_interval=log_interval
+            log_interval=log_interval,
+            reset_num_timesteps=self.config.reset_num_timesteps,
         )
         
         self.save_final_model()
