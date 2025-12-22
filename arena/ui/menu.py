@@ -297,6 +297,10 @@ class Menu:
         
         if self.status_message:
             self._draw_status_banner()
+        
+        # Draw tooltip for hovered model (drawn last so it appears on top)
+        if self.hovered_model_idx >= 0 and self.hovered_model_idx < len(self.models):
+            self._draw_model_tooltip()
 
     def _draw_option_toggle(self, x, y, label, value, current, total, hovered=False):
         """Draw an option toggle."""
@@ -339,6 +343,38 @@ class Menu:
             x2 = x + radius * math.cos(angle2)
             y2 = y + radius * math.sin(angle2)
             pygame.draw.line(self.screen, (100, 200, 255), (int(x1), int(y1)), (int(x2), int(y2)), 3)
+
+    def _draw_model_tooltip(self):
+        """Draw tooltip with full model name when hovering."""
+        model = self.models[self.hovered_model_idx]
+        full_text = f"[{model['algo'].upper()}|S{model['style']}] {model['name']}"
+        
+        # Get mouse position for tooltip placement
+        mouse_x, mouse_y = pygame.mouse.get_pos()
+        
+        # Calculate tooltip dimensions
+        padding = 10
+        text_surf = self.small_font.render(full_text, True, (255, 255, 255))
+        tooltip_width = text_surf.get_width() + padding * 2
+        tooltip_height = text_surf.get_height() + padding * 2
+        
+        # Position tooltip near mouse, but keep it on screen
+        tooltip_x = mouse_x + 15
+        tooltip_y = mouse_y - tooltip_height - 5
+        
+        # Adjust if tooltip would go off-screen
+        if tooltip_x + tooltip_width > config.SCREEN_WIDTH:
+            tooltip_x = config.SCREEN_WIDTH - tooltip_width - 5
+        if tooltip_y < 0:
+            tooltip_y = mouse_y + 20
+        
+        # Draw tooltip background with border
+        tooltip_rect = pygame.Rect(tooltip_x, tooltip_y, tooltip_width, tooltip_height)
+        pygame.draw.rect(self.screen, (20, 20, 35), tooltip_rect)
+        pygame.draw.rect(self.screen, (100, 150, 255), tooltip_rect, 2)
+        
+        # Draw text
+        self.screen.blit(text_surf, (tooltip_x + padding, tooltip_y + padding))
 
     def get_selection(self):
         if not self.models:
