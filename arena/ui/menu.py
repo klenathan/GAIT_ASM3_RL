@@ -210,8 +210,12 @@ class Menu:
             
             model = self.models[idx]
             display_text = f"[{model['algo'].upper()}|S{model['style']}] {model['name']}"
-            if self.font.size(display_text)[0] > self.list_width - 40:
-                display_text = display_text[:45] + "..."
+            max_text_width = self.list_width - 40  # Account for padding and scrollbar
+            if self.font.size(display_text)[0] > max_text_width:
+                # Dynamically truncate to fit within available width
+                while self.font.size(display_text + "...")[0] > max_text_width and len(display_text) > 10:
+                    display_text = display_text[:-1]
+                display_text = display_text.rstrip() + "..."
             text = self.font.render(display_text, True, text_color)
             self.screen.blit(text, (self.list_x + 10, self.list_y + i * self.item_height + 5))
         
