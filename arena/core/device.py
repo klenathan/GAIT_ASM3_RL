@@ -72,12 +72,12 @@ class DeviceManager:
     @staticmethod
     def get_recommended_num_envs(device: str) -> int:
         """Pick a reasonable default for parallel environments."""
-        from arena import config  # Import inside to avoid circular deps
+        from arena.core.config import NUM_ENVS_DEFAULT_MPS, NUM_ENVS_DEFAULT_CUDA, NUM_ENVS_DEFAULT_CPU
         
         if device == "mps":
-            return config.NUM_ENVS_DEFAULT_MPS
+            return NUM_ENVS_DEFAULT_MPS
         elif device == "cuda":
             cpu_count = os.cpu_count() or 4
-            return int(min(config.NUM_ENVS_DEFAULT_CUDA, max(2, cpu_count // 2)))
+            return int(min(NUM_ENVS_DEFAULT_CUDA, max(2, cpu_count // 2)))
         else:
-            return config.NUM_ENVS_DEFAULT_CPU
+            return NUM_ENVS_DEFAULT_CPU

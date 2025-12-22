@@ -12,7 +12,7 @@ from sb3_contrib import RecurrentPPO
 from arena.core.config import TrainerConfig
 from arena.core.device import DeviceManager
 from arena.core import config
-from arena.environment import ArenaEnv
+from arena.core.environment import ArenaEnv
 from arena.ui.renderer import ArenaRenderer
 from arena.ui.menu import Menu
 

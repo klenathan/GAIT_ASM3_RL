@@ -18,16 +18,19 @@ def resolve_activation_fn(activation: Union[str, Type[nn.Module]]) -> Type[nn.Mo
     if not isinstance(activation, str):
         return activation
         
-    activation = activation.lower()
-    if activation == "relu":
-        return nn.ReLU
-    elif activation == "tanh":
-        return nn.Tanh
-    elif activation == "sigmoid":
-        return nn.Sigmoid
-    elif activation == "elu":
-        return nn.ELU
-    elif activation == "selu":
-        return nn.SELU
+    act_name = activation.strip().lower()
     
-    raise ValueError(f"Unknown activation function: {activation}")
+    if act_name == "relu":
+        return nn.ReLU
+    elif act_name == "tanh":
+        return nn.Tanh
+    elif act_name == "sigmoid":
+        return nn.Sigmoid
+    elif act_name == "elu":
+        return nn.ELU
+    elif act_name == "selu":
+        return nn.SELU
+    elif act_name in ["silu", "swish"]:
+        return nn.SiLU
+    
+    raise ValueError(f"Unknown activation function: '{activation}' (processed as '{act_name}')")

@@ -18,6 +18,12 @@ FPS = 60
 GAME_WIDTH = 1000
 GAME_HEIGHT = 800
 
+# Action and Observation Spaces
+ACTION_SPACE_STYLE_1 = 5  # Rotation, Thrust, Shoot
+ACTION_SPACE_STYLE_2 = 6  # Directional (4), Shoot
+OBS_DIM = 14             # Player pos (2), vel (2), rot (1), health (1), phase (1), near_e (3), near_s (3), enemy_count (1)
+
+
 # Colors
 COLOR_BACKGROUND = (10, 10, 25)
 COLOR_PLAYER = (50, 200, 255)
@@ -61,11 +67,11 @@ PROJECTILE_LIFETIME = 120
 
 # Phase System
 PHASE_CONFIG = [
-    {"spawners": 1, "enemy_speed_mult": 1.0, "spawn_rate_mult": 1.0},
-    {"spawners": 2, "enemy_speed_mult": 1.1, "spawn_rate_mult": 0.9},
-    {"spawners": 2, "enemy_speed_mult": 1.2, "spawn_rate_mult": 0.85},
-    {"spawners": 3, "enemy_speed_mult": 1.3, "spawn_rate_mult": 0.8},
-    {"spawners": 3, "enemy_speed_mult": 1.4, "spawn_rate_mult": 0.75},
+    {"spawners": 2, "enemy_speed_mult": 1.0, "spawn_rate_mult": 1.0},
+    {"spawners": 3, "enemy_speed_mult": 1.1, "spawn_rate_mult": 0.9},
+    {"spawners": 3, "enemy_speed_mult": 1.2, "spawn_rate_mult": 0.85},
+    {"spawners": 4, "enemy_speed_mult": 1.3, "spawn_rate_mult": 0.8},
+    {"spawners": 5, "enemy_speed_mult": 1.4, "spawn_rate_mult": 0.75},
 ]
 MAX_PHASES = len(PHASE_CONFIG)
 
@@ -81,6 +87,7 @@ REWARD_STEP_SURVIVAL = 0.0
 REWARD_HIT_ENEMY = 2.0
 REWARD_HIT_SPAWNER = 10.0
 REWARD_SHOT_FIRED = 0.0
+REWARD_QUICK_SPAWNER_KILL = 50.0
 
 # Reward Shaping
 SHAPING_MODE = "delta"
@@ -122,13 +129,17 @@ class TrainerConfig:
     dqn_activation: str = "SiLU"
     
     # PPO specific
-    ppo_net_arch: List[Dict[str, List[int]]] = field(default_factory=lambda: [dict(pi=[256, 128, 64], vf=[256, 128, 64])])
+    ppo_net_arch: Dict[str, List[int]] = field(default_factory=lambda: dict(pi=[256, 128, 64], vf=[256, 128, 64]))
     ppo_activation: str = "SiLU"
     
     # LSTM specific
     ppo_lstm_net_arch: List[int] = field(default_factory=lambda: [128, 64])
     ppo_lstm_hidden_size: int = 128
     ppo_lstm_n_layers: int = 1
+    
+    # A2C specific
+    a2c_net_arch: Dict[str, List[int]] = field(default_factory=lambda: dict(pi=[256, 128, 64], vf=[256, 128, 64]))
+    a2c_activation: str = "SiLU"
 
 @dataclass
 class DQNHyperparams:
@@ -160,6 +171,20 @@ class PPOHyperparams:
     verbose: int = 1
 
 @dataclass
+class A2CHyperparams:
+    learning_rate: float = 7e-4
+    n_steps: int = 5
+    gamma: float = 0.99
+    gae_lambda: float = 1.0
+    ent_coef: float = 0.01
+    vf_coef: float = 0.5
+    max_grad_norm: float = 0.5
+    rms_prop_eps: float = 1e-5
+    use_rms_prop: bool = True
+    normalize_advantage: bool = False
+    verbose: int = 1
+
+@dataclass
 class PPOLSTMHyperparams(PPOHyperparams):
     learning_rate: float = 1e-4
     n_steps: int = 512
@@ -181,3 +206,6 @@ PPO_GPU_DEFAULT = PPOHyperparams(batch_size=256)
 
 PPO_LSTM_DEFAULT = PPOLSTMHyperparams()
 PPO_LSTM_GPU_DEFAULT = PPOLSTMHyperparams(batch_size=64)
+
+A2C_DEFAULT = A2CHyperparams()
+A2C_GPU_DEFAULT = A2CHyperparams(n_steps=8)

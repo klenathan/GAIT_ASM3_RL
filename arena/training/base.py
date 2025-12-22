@@ -14,8 +14,8 @@ from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
 
 from arena.core.config import TrainerConfig
 from arena.core.device import DeviceManager
-from arena.environment import ArenaEnv
-from arena.callbacks import ArenaCallback, PerformanceCallback, HParamCallback
+from arena.core.environment import ArenaEnv
+from arena.training.callbacks import ArenaCallback, PerformanceCallback, HParamCallback
 
 class BaseTrainer(ABC):
     """
@@ -79,20 +79,20 @@ class BaseTrainer(ABC):
 
     def setup_callbacks(self, hparams: Dict[str, Any]) -> None:
         """Setup training callbacks."""
-        checkpoint_dir = os.path.join(
-            self.config.model_save_dir, 
-            self.config.algo, 
-            f"style{self.config.style}"
-        )
-        os.makedirs(checkpoint_dir, exist_ok=True)
+        # checkpoint_dir = os.path.join(
+        #     self.config.model_save_dir, 
+        #     self.config.algo, 
+        #     f"style{self.config.style}"
+        # )
+        # os.makedirs(checkpoint_dir, exist_ok=True)
         
-        checkpoint = CheckpointCallback(
-            save_freq=self.config.checkpoint_freq,
-            save_path=checkpoint_dir,
-            name_prefix=self.run_name,
-            save_replay_buffer=self.config.save_replay_buffer,
-            save_vecnormalize=self.config.save_vecnormalize,
-        )
+        # checkpoint = CheckpointCallback(
+        #     save_freq=self.config.checkpoint_freq,
+        #     save_path=checkpoint_dir,
+        #     name_prefix=self.run_name,
+        #     save_replay_buffer=self.config.save_replay_buffer,
+        #     save_vecnormalize=self.config.save_vecnormalize,
+        # )
         
         # Prepare flat hparams for TensorBoard
         tb_hparams = {
@@ -102,7 +102,7 @@ class BaseTrainer(ABC):
         }
         
         self.callbacks = CallbackList([
-            checkpoint,
+            # checkpoint,  # Disabled checkpoint logging
             ArenaCallback(verbose=0),
             PerformanceCallback(verbose=0),
             HParamCallback(tb_hparams)
@@ -130,12 +130,21 @@ class BaseTrainer(ABC):
         
         self.setup_callbacks(hyperparams)
         
-        print(f"Starting training: {self.run_name}")
+        # Calculate logging interval to be roughly consistent across algos
+        # We want to log roughly every 2000-5000 steps.
+        # SB3 logs every (n_steps * num_envs * log_interval) steps.
+        rollout_size = self.env.num_envs * hyperparams.get("n_steps", 1)
+        # Default target of ~2000 steps per log point
+        target_log_steps = 2000
+        log_interval = max(1, target_log_steps // rollout_size)
+        
+        print(f"Starting training: {self.run_name} (log_interval={log_interval})")
         self.model.learn(
             total_timesteps=self.config.total_timesteps,
             callback=self.callbacks,
             tb_log_name=self.run_name,
-            progress_bar=self.config.progress_bar
+            progress_bar=self.config.progress_bar,
+            log_interval=log_interval
         )
         
         self.save_final_model()

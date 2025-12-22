@@ -106,7 +106,7 @@ class ArenaEnv(gym.Env):
         for enemy in self.enemies:
             if enemy.alive:
                 enemy.update(self.player.pos)
-                if enemy.shoot(self.player.pos):
+                if enemy.shoot(self.player.pos, self.np_random):
                     angle = utils.angle_to_point(enemy.pos, self.player.pos)
                     self.projectiles.append(Projectile(enemy.pos[0], enemy.pos[1], angle, False))
         
@@ -115,7 +115,7 @@ class ArenaEnv(gym.Env):
             if spawner.alive:
                 spawner.update()
                 if spawner.can_spawn(len([e for e in self.enemies if e.alive])):
-                    new_enemy = spawner.spawn_enemy(phase_cfg['enemy_speed_mult'])
+                    new_enemy = spawner.spawn_enemy(self.np_random, phase_cfg['enemy_speed_mult'])
                     if new_enemy: self.enemies.append(new_enemy)
         
         for proj in self.projectiles:

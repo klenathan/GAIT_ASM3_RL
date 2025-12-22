@@ -6,10 +6,14 @@ Uses the modular TrainerRunner and AlgorithmRegistry.
 import argparse
 from arena.core.config import TrainerConfig
 from arena.training.runner import TrainerRunner
+from arena.training.registry import AlgorithmRegistry
+# Import algorithms to register them
+import arena.training.algorithms 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Arena RL Trainer")
-    parser.add_argument("--algo", type=str, default="ppo", choices=["dqn", "ppo", "ppo_lstm"])
+    available_algos = AlgorithmRegistry.list_algorithms()
+    parser.add_argument("--algo", type=str, default="ppo", choices=available_algos)
     parser.add_argument("--style", type=int, default=1, choices=[1, 2])
     parser.add_argument("--steps", type=int, help="Override total timesteps")
     parser.add_argument("--lr", type=float, help="Override learning rate")
@@ -25,7 +29,7 @@ def main():
     # Create config from args
     config = TrainerConfig(
         algo=args.algo,
-        control_style=args.style,
+        style=args.style,
         device=args.device,
         render=not args.no_render
     )
@@ -35,7 +39,7 @@ def main():
     if args.lr: config.learning_rate = args.lr
     if args.batch: config.batch_size = args.batch
     
-    print(f"Starting training: {config.algo} (Style {config.control_style}) on {config.device}")
+    print(f"Starting training: {config.algo} (Style {config.style}) on {config.device}")
     
     runner = TrainerRunner(config)
     runner.run()

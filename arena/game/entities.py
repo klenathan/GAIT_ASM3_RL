@@ -116,9 +116,9 @@ class Enemy:
     def can_shoot(self):
         return self.shoot_cooldown == 0
     
-    def shoot(self, player_pos):
+    def shoot(self, player_pos, np_random=np.random):
         """Attempt to shoot at player."""
-        if self.can_shoot() and np.random.random() < config.ENEMY_SHOOT_PROBABILITY:
+        if self.can_shoot() and np_random.random() < config.ENEMY_SHOOT_PROBABILITY:
             self.shoot_cooldown = config.ENEMY_SHOOT_COOLDOWN
             return True
         return False
@@ -149,11 +149,11 @@ class Spawner:
         return (self.spawn_cooldown == 0 and 
                 current_enemy_count < config.SPAWNER_MAX_ENEMIES)
     
-    def spawn_enemy(self, speed_multiplier=1.0):
+    def spawn_enemy(self, np_random=np.random, speed_multiplier=1.0):
         """Create a new enemy around the spawner."""
         if self.spawn_cooldown == 0:
             self.spawn_cooldown = self.spawn_rate
-            angle = np.random.random() * 2 * math.pi
+            angle = np_random.random() * 2 * math.pi
             offset = utils.vector_from_angle(angle, self.radius + config.ENEMY_RADIUS + 5)
             spawn_pos = self.pos + offset
             
