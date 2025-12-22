@@ -96,8 +96,8 @@ PROJECTILE_LIFETIME = 120
 
 # Phase System
 PHASE_CONFIG = [
-    {"spawners": 2, "enemy_speed_mult": 1.0, "spawn_rate_mult": 1.0},
-    {"spawners": 3, "enemy_speed_mult": 1.1, "spawn_rate_mult": 0.9},
+    {"spawners": 1, "enemy_speed_mult": 1.0, "spawn_rate_mult": 1.0},
+    {"spawners": 2, "enemy_speed_mult": 1.1, "spawn_rate_mult": 0.9},
     {"spawners": 3, "enemy_speed_mult": 1.2, "spawn_rate_mult": 0.85},
     {"spawners": 4, "enemy_speed_mult": 1.3, "spawn_rate_mult": 0.8},
     {"spawners": 5, "enemy_speed_mult": 1.4, "spawn_rate_mult": 0.75},

@@ -9,8 +9,8 @@ import numpy as np
 
 from arena.core import config
 
-STYLE_1_LABELS = ["Rotate L", "Rotate R", "Thrust", "Idle", "Shoot"]
-STYLE_2_LABELS = ["Up", "Down", "Left", "Right", "Idle", "Shoot"]
+STYLE_1_LABELS = ["Idle", "Thrust", "Rotate L", "Rotate R", "Shoot"]
+STYLE_2_LABELS = ["Idle", "Up", "Down", "Left", "Right", "Shoot"]
 
 class ArenaRenderer:
     """Handles all rendering for the Arena environment."""

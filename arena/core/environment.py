@@ -253,7 +253,9 @@ class ArenaEnv(gym.Env):
         obs[7] = self.current_phase / config.MAX_PHASES
         
         # [8] Spawners remaining ratio (for current phase objectives)
-        initial_spawners = config.PHASE_CONFIG[self.current_phase]['spawners']
+        # Clamp phase index to valid range (handles edge case when game ends after final phase)
+        phase_idx = min(self.current_phase, config.MAX_PHASES - 1)
+        initial_spawners = config.PHASE_CONFIG[phase_idx]['spawners']
         obs[8] = len([s for s in self.spawners if s.alive]) / max(initial_spawners, 1)
         
         # [9] Time remaining ratio
