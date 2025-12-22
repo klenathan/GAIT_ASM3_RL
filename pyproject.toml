@@ -17,6 +17,7 @@ dependencies = [
     "torch",
     "torchvision",
     "torchaudio",
+    "sb3-contrib>=2.7.1",
 ]
 
 
