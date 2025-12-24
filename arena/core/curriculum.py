@@ -108,6 +108,7 @@ class CurriculumStage:
     spawner_health_mult: float = 1.0   # Lower = easier to kill
     enemy_speed_mult: float = 1.0      # Lower = slower enemies
     shaping_scale_mult: float = 1.0    # Higher = stronger guidance
+    damage_penalty_mult: float = 1.0   # Higher = more severe damage penalties
     
     def __repr__(self):
         return f"Stage({self.name})"
@@ -157,6 +158,7 @@ def get_default_stages() -> List[CurriculumStage]:
             spawner_health_mult=0.5,
             enemy_speed_mult=0.8,
             shaping_scale_mult=3.0,
+            damage_penalty_mult=0.5,  # Gentler penalties: -1.0 instead of -2.0
         ),
         CurriculumStage(
             name="Easy",
@@ -165,6 +167,7 @@ def get_default_stages() -> List[CurriculumStage]:
             spawner_health_mult=0.7,
             enemy_speed_mult=0.9,
             shaping_scale_mult=2.0,
+            damage_penalty_mult=1.0,  # Normal penalties: -2.0
         ),
         CurriculumStage(
             name="Medium",
@@ -173,6 +176,7 @@ def get_default_stages() -> List[CurriculumStage]:
             spawner_health_mult=0.85,
             enemy_speed_mult=0.95,
             shaping_scale_mult=1.5,
+            damage_penalty_mult=1.5,  # Moderate increase: -3.0
         ),
         CurriculumStage(
             name="Hard",
@@ -181,6 +185,7 @@ def get_default_stages() -> List[CurriculumStage]:
             spawner_health_mult=0.95,
             enemy_speed_mult=1.0,
             shaping_scale_mult=1.2,
+            damage_penalty_mult=2.5,  # Significant penalty: -5.0
         ),
         CurriculumStage(
             name="Expert",
@@ -189,6 +194,7 @@ def get_default_stages() -> List[CurriculumStage]:
             spawner_health_mult=1.0,
             enemy_speed_mult=1.0,
             shaping_scale_mult=1.0,
+            damage_penalty_mult=4.0,  # Severe penalty: -8.0
         ),
     ]
 
@@ -277,3 +283,31 @@ class CurriculumManager:
             "episodes_recorded": len(self.metrics.spawner_kills),
             "strategy": self.config.strategy.get_name() if self.config.strategy else "None",
         }
+    
+    def to_dict(self) -> dict:
+        """Serialize curriculum state for checkpointing."""
+        return {
+            "current_stage_index": self.current_stage_index,
+            "metrics": {
+                # Keep last 200 episodes to limit file size
+                "spawner_kills": list(self.metrics.spawner_kills[-200:]),
+                "wins": list(self.metrics.wins[-200:]),
+                "episode_lengths": list(self.metrics.episode_lengths[-200:]),
+                "episode_rewards": list(self.metrics.episode_rewards[-200:]),
+            }
+        }
+    
+    def load_from_dict(self, data: dict):
+        """Restore curriculum state from checkpoint."""
+        if not data:
+            return
+        
+        self.current_stage_index = data.get("current_stage_index", 0)
+        
+        # Restore metrics if available
+        if "metrics" in data:
+            m = data["metrics"]
+            self.metrics.spawner_kills = list(m.get("spawner_kills", []))
+            self.metrics.wins = list(m.get("wins", []))
+            self.metrics.episode_lengths = list(m.get("episode_lengths", []))
+            self.metrics.episode_rewards = list(m.get("episode_rewards", []))

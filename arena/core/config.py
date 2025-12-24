@@ -110,7 +110,7 @@ STEP_REWARD = 0.1
 REWARD_ENEMY_DESTROYED = 5.0
 REWARD_SPAWNER_DESTROYED = 150.0
 REWARD_PHASE_COMPLETE = 200.0
-REWARD_DAMAGE_TAKEN = -2.0
+REWARD_DAMAGE_TAKEN = -2.0  # Base penalty; scaled by curriculum.damage_penalty_mult when curriculum is enabled
 REWARD_DEATH = -150.0
 REWARD_STEP_SURVIVAL = 0.005  # Reduced from 0.02 - engagement should dominate
 REWARD_HIT_ENEMY = 2.0
@@ -131,8 +131,8 @@ SHAPING_CLIP = 0.1
 
 # Curriculum Learning
 CURRICULUM_ENABLED = True
-CURRICULUM_ADVANCEMENT_THRESHOLD = 0.3  # Spawner kill rate to advance
-CURRICULUM_MIN_EPISODES = 50            # Min episodes before advancing
+CURRICULUM_ADVANCEMENT_THRESHOLD = 1  # Spawner kill rate to advance
+CURRICULUM_MIN_EPISODES = 100            # Min episodes before advancing
 CURRICULUM_WINDOW = 100                 # Episodes for averaging
 
 # Parallel Environments
@@ -140,10 +140,13 @@ NUM_ENVS_DEFAULT_MPS = 4
 NUM_ENVS_DEFAULT_CUDA = 20
 NUM_ENVS_DEFAULT_CPU = 12
 
-# Storage
-TENSORBOARD_LOG_DIR = "./logs"
-MODEL_SAVE_DIR = "./models"
+# Storage - Unified directory structure
+RUNS_DIR = "./runs"  # Base directory for all training runs
 CHECKPOINT_FREQ = 10_000
+
+# Legacy paths (for backward compatibility with old models)
+TENSORBOARD_LOG_DIR = "./logs"  # Deprecated: kept for reference only
+MODEL_SAVE_DIR = "./models"      # Deprecated: kept for reference only
 
 # ============================================================================
 # STRUCTURED CONFIGURATIONS
@@ -162,12 +165,15 @@ class TrainerConfig:
     checkpoint_freq: int = 50_000
     save_replay_buffer: bool = False
     save_vecnormalize: bool = True
-    tensorboard_log_dir: str = TENSORBOARD_LOG_DIR
-    model_save_dir: str = MODEL_SAVE_DIR
+    runs_dir: str = RUNS_DIR  # Unified directory for models and logs
     # Optional resume/transfer learning
     pretrained_model_path: Optional[str] = None
     # Whether to reset timesteps in SB3 learn(); when resuming, typically False
     reset_num_timesteps: bool = True
+    # Transfer learning fine-grained control
+    load_vecnormalize: bool = True   # Load VecNormalize stats if available
+    load_curriculum: bool = True      # Restore curriculum progress
+    load_replay_buffer: bool = True   # Load replay buffer (DQN only)
     
     # Learning rate schedule
     lr_schedule: str = "constant"  # "constant", "linear", "exponential", "cosine"
@@ -188,7 +194,7 @@ class TrainerConfig:
     ppo_lstm_n_layers: int = 1
     
     # A2C specific
-    a2c_net_arch: Dict[str, List[int]] = field(default_factory=lambda: dict(pi=[256, 128, 128, 64], vf=[256, 128, 128, 64]))
+    a2c_net_arch: Dict[str, List[int]] = field(default_factory=lambda: dict(pi=[384, 256, 256, 128, 64], vf=[256, 128, 128, 64]))
     a2c_activation: str = "SiLU"
 
 @dataclass
@@ -218,7 +224,7 @@ class PPOHyperparams:
     ent_coef: float = 0.005
     vf_coef: float = 1.0
     max_grad_norm: float = 0.5
-    target_kl: float = 0.05  # Early stopping if KL divergence exceeds this threshold
+    target_kl: float = 0.1
     verbose: int = 1
 
 @dataclass

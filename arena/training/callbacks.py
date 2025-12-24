@@ -7,6 +7,8 @@ import numpy as np
 import time
 import os
 
+from arena.training.training_state import save_training_state, get_training_state_path, TrainingState
+
 
 class LearningRateCallback(BaseCallback):
     """Logs the current learning rate to TensorBoard."""
@@ -152,7 +154,12 @@ class PerformanceCallback(BaseCallback):
         return True
 
 class HParamCallback(BaseCallback):
-    """Logs hyperparameters to TensorBoard."""
+    """
+    Logs hyperparameters to TensorBoard as formatted text.
+    
+    Hyperparameters are logged as a markdown table in the TEXT tab,
+    providing a clean single-run view without duplicate entries.
+    """
     def __init__(self, hparams: dict):
         super().__init__()
         self.hparams = hparams
@@ -160,11 +167,23 @@ class HParamCallback(BaseCallback):
     def _on_training_start(self) -> None:
         for output_format in self.logger.output_formats:
             if hasattr(output_format, "writer"):
-                clean = {k: (v if isinstance(v, (int, float, str, bool)) else str(v)) 
-                        for k, v in self.hparams.items()}
-                metrics = {"rollout/ep_rew_mean": 0.0, "arena/win_rate_100ep": 0.0}
-                output_format.writer.add_hparams(clean, metrics)
+                # Format hyperparameters as a markdown table
+                hparam_lines = ["| Hyperparameter | Value |", "|----------------|-------|"]
+                for k, v in sorted(self.hparams.items()):
+                    # Format values appropriately
+                    if isinstance(v, float):
+                        value_str = f"{v:.6g}"  # Format floats with up to 6 significant digits
+                    elif isinstance(v, (int, str, bool)):
+                        value_str = str(v)
+                    else:
+                        value_str = str(v)
+                    hparam_lines.append(f"| {k} | {value_str} |")
+                
+                hparam_text = "\n".join(hparam_lines)
+                # Log at timestep 0 so it appears at the start of training
+                output_format.writer.add_text("hyperparameters", hparam_text, global_step=0)
                 break
+                
     def _on_step(self) -> bool: return True
 
 
@@ -247,3 +266,64 @@ class CurriculumCallback(BaseCallback):
         self.logger.record("curriculum/stage", self.curriculum_manager.current_stage_index)
         
         return True
+
+
+class CheckpointWithStateCallback(CheckpointCallback):
+    """
+    Extended CheckpointCallback that also saves training state.
+    Enables proper transfer learning by preserving curriculum progress.
+    """
+    
+    def __init__(
+        self,
+        curriculum_manager,
+        save_freq: int,
+        save_path: str,
+        name_prefix: str = "rl_model",
+        save_replay_buffer: bool = False,
+        save_vecnormalize: bool = False,
+        verbose: int = 0,
+    ):
+        super().__init__(
+            save_freq=save_freq,
+            save_path=save_path,
+            name_prefix=name_prefix,
+            save_replay_buffer=save_replay_buffer,
+            save_vecnormalize=save_vecnormalize,
+            verbose=verbose,
+        )
+        self.curriculum_manager = curriculum_manager
+    
+    def _on_step(self) -> bool:
+        # Call parent to handle standard checkpoint saving
+        result = super()._on_step()
+        
+        # If a checkpoint was just saved, also save training state
+        if self.n_calls % self.save_freq == 0:
+            if self.curriculum_manager:
+                # Get the path to the just-saved checkpoint
+                checkpoint_path = os.path.join(
+                    self.save_path,
+                    f"{self.name_prefix}_{self.num_timesteps}_steps.zip"
+                )
+                
+                # Save training state
+                curriculum_dict = self.curriculum_manager.to_dict()
+                state = TrainingState(
+                    model_path=checkpoint_path,
+                    algo=getattr(self.model, "model_class", "unknown"),
+                    style=0,  # Not available here, but preserved in filename
+                    total_timesteps_completed=self.num_timesteps,
+                    total_episodes=0,
+                    curriculum_stage_index=curriculum_dict["current_stage_index"],
+                    curriculum_metrics=curriculum_dict["metrics"],
+                )
+                
+                state_path = get_training_state_path(checkpoint_path)
+                save_training_state(state_path, state)
+                
+                if self.verbose > 0:
+                    print(f"Training state saved: {state_path}")
+        
+        return result
+

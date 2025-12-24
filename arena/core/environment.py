@@ -354,6 +354,12 @@ class ArenaEnv(gym.Env):
     
     def _handle_collisions(self):
         reward = 0.0
+        
+        # Calculate damage penalty with curriculum scaling
+        damage_penalty = config.REWARD_DAMAGE_TAKEN
+        if self.curriculum_stage:
+            damage_penalty *= self.curriculum_stage.damage_penalty_mult
+        
         for proj in self.projectiles:
             if not proj.alive or not proj.is_player_projectile: continue
             for enemy in self.enemies:
@@ -378,14 +384,16 @@ class ArenaEnv(gym.Env):
                         if (self.current_step - self.phase_start_step) < 500: reward += config.REWARD_QUICK_SPAWNER_KILL
                     break
         
+        # Apply curriculum-scaled damage penalty for projectile hits
         for proj in self.projectiles:
             if not proj.alive or proj.is_player_projectile: continue
             if self.player.alive and utils.check_collision(proj.pos, proj.radius, self.player.pos, self.player.radius):
-                self.player.take_damage(proj.damage); proj.hit(); reward += config.REWARD_DAMAGE_TAKEN
+                self.player.take_damage(proj.damage); proj.hit(); reward += damage_penalty
         
+        # Apply curriculum-scaled damage penalty for enemy collisions
         for enemy in self.enemies:
             if enemy.alive and self.player.alive and utils.check_collision(enemy.pos, enemy.radius, self.player.pos, self.player.radius):
-                self.player.take_damage(config.ENEMY_DAMAGE); enemy.take_damage(enemy.max_health); reward += config.REWARD_DAMAGE_TAKEN
+                self.player.take_damage(config.ENEMY_DAMAGE); enemy.take_damage(enemy.max_health); reward += damage_penalty
                 if not enemy.alive:
                     self.enemies_destroyed += 1
                     self.enemies_destroyed_this_step += 1
