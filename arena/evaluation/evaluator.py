@@ -142,6 +142,8 @@ class Evaluator:
                         self.renderer.show_health = not self.renderer.show_health
                     if event.key == pygame.K_v:
                         self.renderer.show_vision = not self.renderer.show_vision
+                    if event.key == pygame.K_d:
+                        self.renderer.show_debug = not self.renderer.show_debug
             
             # Predict action (obs is already an array from VecEnv)
             if self.is_recurrent:

@@ -63,6 +63,7 @@ class ArenaCallback(BaseCallback):
         self.current_episode_length += 1
         
         # Track increments for totals and episode-specific counts
+        phases = []
         for i, info in enumerate(infos):
             e = int(info.get("enemies_destroyed", 0))
             s = int(info.get("spawners_destroyed", 0))
@@ -70,7 +71,12 @@ class ArenaCallback(BaseCallback):
             self.current_episode_spawners[i] += s
             self.enemies_destroyed_total += e
             self.spawners_destroyed_total += s
-            self.max_phase_reached = max(self.max_phase_reached, int(info.get("phase", 0)))
+            
+            phase = int(info.get("phase", 0))
+            self.max_phase_reached = max(self.max_phase_reached, phase)
+            phases.append(phase)
+        
+        mean_phase = float(np.mean(phases)) if phases else 0.0
 
         if not np.any(dones): return True
 
@@ -116,6 +122,7 @@ class ArenaCallback(BaseCallback):
         self.logger.record("arena/total_enemies_destroyed", self.enemies_destroyed_total)
         self.logger.record("arena/total_spawners_destroyed", self.spawners_destroyed_total)
         self.logger.record("arena/max_phase_reached", self.max_phase_reached)
+        self.logger.record("arena/mean_phase_reached", mean_phase)
 
         return True
 

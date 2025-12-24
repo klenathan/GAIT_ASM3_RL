@@ -18,6 +18,7 @@ dependencies = [
     "torchvision",
     "torchaudio",
     "sb3-contrib>=2.7.1",
+    "pygame-emojis>=0.2.0",
 ]
 
 

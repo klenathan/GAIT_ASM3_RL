@@ -6,6 +6,7 @@ Displays game state with on-screen training metrics.
 import pygame
 import math
 import numpy as np
+from pygame_emojis import load_emoji
 
 from arena.core import config
 
@@ -21,12 +22,14 @@ class ArenaRenderer:
         pygame.display.set_caption("Deep RL Arena")
         self.clock = pygame.time.Clock()
         self.font = pygame.font.Font(None, 24)
-        self.title_font = pygame.font.Font(None, 32)
+        self.title_font = pygame.font.Font(None, 28)
         self.small_font = pygame.font.Font(None, 20)
+        self.section_font = pygame.font.Font(None, 18)
         
         # Debug flags
         self.show_health = True
         self.show_vision = False
+        self.show_debug = False  # Comprehensive debug mode (D key)
         
         # Metrics panel position
         self.panel_x = config.GAME_WIDTH + 10
@@ -34,6 +37,24 @@ class ArenaRenderer:
         
         self.model_output = None
         self.control_style = 1
+        
+        # Emoji cache for performance
+        self._emoji_cache = {}
+        self._load_emojis()
+    
+    def _load_emojis(self):
+        """Pre-load emoji surfaces for panel icons."""
+        emoji_size = (14, 14)
+        emoji_list = ['⚔️', '🎯', '💀', '❤️', '🚀', '📍', '🔄', '⏱️']
+        for emoji in emoji_list:
+            try:
+                self._emoji_cache[emoji] = load_emoji(emoji, emoji_size)
+            except Exception:
+                self._emoji_cache[emoji] = None
+    
+    def _get_emoji(self, emoji):
+        """Get cached emoji surface or None."""
+        return self._emoji_cache.get(emoji)
         
     def render(self, env, training_metrics=None):
         """Render the entire scene."""
@@ -59,6 +80,9 @@ class ArenaRenderer:
             
         if self.show_vision:
             self._draw_vision_debug(env)
+        
+        if self.show_debug:
+            self._draw_debug_overlay(env)
         
         pygame.display.flip()
         self.clock.tick(config.FPS)
@@ -139,64 +163,119 @@ class ArenaRenderer:
                         (bar_x, bar_y, health_width, bar_height))
     
     def _draw_metrics_panel(self, env, metrics):
-        """Draw training metrics panel."""
+        """Draw training metrics panel with organized sections."""
         x = self.panel_x
-        y = 20
-        line_height = 30
+        y = 10
+        line_height = 22
+        section_gap = 6
         
-        panel_rect = pygame.Rect(x - 5, y - 5, self.panel_width - 10, 
-                                config.SCREEN_HEIGHT - 30)
+        available_width = config.SCREEN_WIDTH - config.GAME_WIDTH - 20
+        
+        # Panel background
+        panel_rect = pygame.Rect(x - 5, y - 5, available_width, config.SCREEN_HEIGHT - 30)
         pygame.draw.rect(self.screen, config.COLOR_PANEL_BG, panel_rect)
         pygame.draw.rect(self.screen, config.COLOR_PANEL_BORDER, panel_rect, 2)
         
+        # Title
         title = self.title_font.render("Training Metrics", True, config.COLOR_TEXT)
         self.screen.blit(title, (x + 10, y))
-        y += 45
+        y += 32
         
-        pygame.draw.line(self.screen, config.COLOR_PANEL_BORDER, 
-                        (x, y), (x + self.panel_width - 20, y), 1)
-        y += 15
-        
-        self._draw_metric(x, y, "Episode:", metrics.get('episode', 0))
+        # ═══ SESSION SECTION ═══
+        y = self._draw_section_header(x, y, "SESSION", available_width)
+        self._draw_metric_row(x, y, "Episode", metrics.get('episode', 0), available_width)
         y += line_height
-        self._draw_metric(x, y, "Step:", env.current_step)
+        self._draw_metric_row(x, y, "Step", env.current_step, available_width)
         y += line_height
-        self._draw_metric(x, y, "Phase:", f"{env.current_phase + 1}/{config.MAX_PHASES}")
-        y += line_height
+        self._draw_metric_row(x, y, "Phase", f"{env.current_phase + 1}/{config.MAX_PHASES}", available_width)
+        y += line_height + section_gap
         
-        y += 10
-        pygame.draw.line(self.screen, config.COLOR_PANEL_BORDER, 
-                        (x, y), (x + self.panel_width - 20, y), 1)
-        y += 15
-        
-        episode_reward = metrics.get('episode_reward', 0)
-        self._draw_metric(x, y, "Episode Reward:", f"{episode_reward:.1f}")
+        # ═══ REWARDS SECTION ═══
+        y = self._draw_section_header(x, y, "REWARDS", available_width)
+        ep_reward = metrics.get('episode_reward', 0)
+        reward_color = (100, 255, 100) if ep_reward >= 0 else (255, 100, 100)
+        self._draw_metric_row(x, y, "Episode", f"{ep_reward:.1f}", available_width, value_color=reward_color)
         y += line_height
         total_reward = metrics.get('total_reward', 0)
-        self._draw_metric(x, y, "Total Reward:", f"{total_reward:.1f}")
+        total_color = (100, 255, 100) if total_reward >= 0 else (255, 100, 100)
+        self._draw_metric_row(x, y, "Total", f"{total_reward:.1f}", available_width, value_color=total_color)
+        y += line_height + section_gap
+        
+        # ═══ COMBAT SECTION ═══
+        y = self._draw_section_header(x, y, "COMBAT", available_width)
+        self._draw_metric_row(x, y, "Enemies", env.enemies_destroyed, available_width, emoji='⚔️')
         y += line_height
-        
-        y += 10
-        pygame.draw.line(self.screen, config.COLOR_PANEL_BORDER, 
-                        (x, y), (x + self.panel_width - 20, y), 1)
-        y += 15
-        
-        self._draw_metric(x, y, "Enemies Killed:", env.enemies_destroyed)
+        self._draw_metric_row(x, y, "Spawners", env.spawners_destroyed, available_width, emoji='🎯')
         y += line_height
-        self._draw_metric(x, y, "Spawners Killed:", env.spawners_destroyed)
-        y += line_height
-        
-        y += 10
-        pygame.draw.line(self.screen, config.COLOR_PANEL_BORDER, 
-                        (x, y), (x + self.panel_width - 20, y), 1)
-        y += 15
-        
         health_pct = int(env.player.get_health_ratio() * 100)
-        self._draw_metric(x, y, "Player Health:", f"{health_pct}%")
+        health_color = config.COLOR_HEALTH_GOOD if health_pct > 60 else config.COLOR_HEALTH_MEDIUM if health_pct > 30 else config.COLOR_HEALTH_BAD
+        self._draw_metric_row(x, y, "Health", f"{health_pct}%", available_width, emoji='❤️', value_color=health_color)
+        y += line_height + section_gap
+        
+        # ═══ ENTITIES SECTION ═══
+        y = self._draw_section_header(x, y, "ENTITIES", available_width)
+        alive_enemies = len([e for e in env.enemies if e.alive])
+        self._draw_metric_row(x, y, "Enemies", alive_enemies, available_width)
         y += line_height
+        alive_spawners = len([s for s in env.spawners if s.alive])
+        self._draw_metric_row(x, y, "Spawners", alive_spawners, available_width)
+        y += line_height
+        alive_projectiles = len([p for p in env.projectiles if p.alive])
+        self._draw_metric_row(x, y, "Projectiles", alive_projectiles, available_width)
+        y += line_height + section_gap
+        
+        # ═══ PLAYER SECTION ═══
+        if env.player.alive:
+            y = self._draw_section_header(x, y, "PLAYER", available_width)
+            player_speed = np.linalg.norm(env.player.velocity)
+            self._draw_metric_row(x, y, "Speed", f"{player_speed:.1f}", available_width, emoji='🚀')
+            y += line_height
+            self._draw_metric_row(x, y, "Position", f"({int(env.player.pos[0])},{int(env.player.pos[1])})", available_width, emoji='📍')
+            y += line_height
+            rotation_deg = math.degrees(env.player.rotation) % 360
+            self._draw_metric_row(x, y, "Rotation", f"{rotation_deg:.0f}°", available_width, emoji='🔄')
+            y += line_height
+            self._draw_metric_row(x, y, "Cooldown", env.player.shoot_cooldown, available_width, emoji='⏱️')
+            y += line_height + section_gap
+        
+        # ═══ SYSTEM SECTION ═══
+        y = self._draw_section_header(x, y, "SYSTEM", available_width)
         fps = int(self.clock.get_fps())
-        self._draw_metric(x, y, "FPS:", fps)
-        y += line_height
+        fps_color = (100, 255, 100) if fps >= 55 else (255, 200, 100) if fps >= 30 else (255, 100, 100)
+        self._draw_metric_row(x, y, "FPS", fps, available_width, value_color=fps_color)
+    
+    def _draw_section_header(self, x, y, title, width):
+        """Draw a section header with subtle line."""
+        # Draw separator line
+        pygame.draw.line(self.screen, (60, 60, 80), (x + 5, y), (x + width - 15, y), 1)
+        y += 8
+        # Draw section title
+        header = self.section_font.render(title, True, (120, 120, 150))
+        self.screen.blit(header, (x + 10, y))
+        return y + 18
+    
+    def _draw_metric_row(self, x, y, label, value, width, emoji=None, value_color=None):
+        """Draw a metric row with optional emoji and right-aligned value."""
+        label_x = x + 10
+        value_x = x + width - 20
+        
+        # Draw emoji if provided
+        if emoji and self._get_emoji(emoji):
+            emoji_surf = self._get_emoji(emoji)
+            self.screen.blit(emoji_surf, (label_x, y + 2))
+            label_x += 18
+        
+        # Draw label
+        label_surface = self.small_font.render(label, True, (160, 160, 180))
+        self.screen.blit(label_surface, (label_x, y))
+        
+        # Draw value (right-aligned)
+        color = value_color if value_color else config.COLOR_TEXT
+        value_surface = self.small_font.render(str(value), True, color)
+        value_rect = value_surface.get_rect()
+        value_rect.right = value_x
+        value_rect.top = y
+        self.screen.blit(value_surface, value_rect)
 
     def _draw_model_output_panel(self):
         """Draw model introspection panel."""
@@ -292,7 +371,7 @@ class ArenaRenderer:
         self.screen.blit(val, (x + 85, y))
 
     def _draw_metric(self, x, y, label, value):
-        """Draw a single metric line."""
+        """Draw a single metric line (legacy method for compatibility)."""
         label_surface = self.font.render(label, True, (180, 180, 180))
         value_surface = self.font.render(str(value), True, config.COLOR_TEXT)
         self.screen.blit(label_surface, (x + 10, y))
@@ -318,6 +397,78 @@ class ArenaRenderer:
         nearest_spawner = env._find_nearest_entity(env.spawners)
         if nearest_spawner:
             pygame.draw.line(self.screen, (255, 100, 255, 150), player_pos, nearest_spawner.pos, 1)
+
+    def _draw_debug_overlay(self, env):
+        """Draw comprehensive debug information overlay."""
+        # Draw HP values next to health bars for all entities
+        if env.player.alive:
+            self._draw_debug_hp(env.player.pos, env.player.radius, env.player.health, env.player.max_health)
+            self._draw_debug_velocity(env.player.pos, env.player.velocity, (100, 255, 100))
+            
+        for enemy in env.enemies:
+            if enemy.alive:
+                self._draw_debug_hp(enemy.pos, enemy.radius, enemy.health, enemy.max_health, small=True)
+                self._draw_debug_velocity(enemy.pos, np.array([enemy.speed, 0]), (255, 100, 100), scale=2.0)
+                
+        for spawner in env.spawners:
+            if spawner.alive:
+                self._draw_debug_hp(spawner.pos, spawner.radius, spawner.health, spawner.max_health)
+                # Show spawn cooldown
+                cooldown_text = f"CD:{spawner.spawn_cooldown}"
+                cd_surf = self.small_font.render(cooldown_text, True, (255, 200, 100))
+                self.screen.blit(cd_surf, (int(spawner.pos[0] - 15), int(spawner.pos[1] + spawner.radius + 20)))
+                # Show enemies spawned
+                spawned_text = f"Spawned:{spawner.enemies_spawned}"
+                sp_surf = self.small_font.render(spawned_text, True, (200, 150, 255))
+                self.screen.blit(sp_surf, (int(spawner.pos[0] - 30), int(spawner.pos[1] + spawner.radius + 35)))
+    
+    def _draw_debug_hp(self, pos, entity_radius, health, max_health, small=False):
+        """Draw HP value text next to health bar."""
+        hp_text = f"{int(health)}/{int(max_health)}"
+        color = (255, 255, 255) if health > max_health * 0.5 else (255, 200, 100) if health > max_health * 0.25 else (255, 100, 100)
+        font = self.small_font if small else self.font
+        hp_surf = font.render(hp_text, True, color)
+        
+        # Position to the right of the entity
+        text_x = int(pos[0] + entity_radius + 5)
+        text_y = int(pos[1] - entity_radius - 10)
+        
+        # Draw semi-transparent background
+        bg_rect = hp_surf.get_rect()
+        bg_rect.topleft = (text_x, text_y)
+        bg_surface = pygame.Surface((bg_rect.width + 4, bg_rect.height + 2))
+        bg_surface.set_alpha(180)
+        bg_surface.fill((0, 0, 0))
+        self.screen.blit(bg_surface, (text_x - 2, text_y - 1))
+        
+        self.screen.blit(hp_surf, (text_x, text_y))
+    
+    def _draw_debug_velocity(self, pos, velocity, color, scale=5.0):
+        """Draw velocity vector as an arrow."""
+        if np.linalg.norm(velocity) > 0.1:
+            end_pos = pos + velocity * scale
+            pygame.draw.line(self.screen, color, 
+                           (int(pos[0]), int(pos[1])), 
+                           (int(end_pos[0]), int(end_pos[1])), 2)
+            # Draw arrowhead
+            angle = math.atan2(velocity[1], velocity[0])
+            arrow_size = 5
+            left_angle = angle + 2.5
+            right_angle = angle - 2.5
+            left_point = (int(end_pos[0] - arrow_size * math.cos(left_angle)),
+                         int(end_pos[1] - arrow_size * math.sin(left_angle)))
+            right_point = (int(end_pos[0] - arrow_size * math.cos(right_angle)),
+                          int(end_pos[1] - arrow_size * math.sin(right_angle)))
+            pygame.draw.polygon(self.screen, color, 
+                              [(int(end_pos[0]), int(end_pos[1])), left_point, right_point])
+    
+    def _draw_debug_line(self, x, y, label, value):
+        """Draw a single debug info line."""
+        label_surf = self.small_font.render(label, True, (180, 180, 180))
+        value_surf = self.small_font.render(str(value), True, (255, 255, 255))
+        self.screen.blit(label_surf, (x, y))
+        self.screen.blit(value_surf, (x + 120, y))
+
 
     def render_menu(self, menu):
         """Render selection menu."""

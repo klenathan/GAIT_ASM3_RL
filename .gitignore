@@ -21,5 +21,6 @@ dist/
 build/
 *.egg-info/
 models/**/*.zip
+models/*.zip
 models/**/*.pkl
 logs/*
