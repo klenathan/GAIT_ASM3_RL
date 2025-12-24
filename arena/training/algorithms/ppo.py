@@ -51,6 +51,7 @@ class PPOTrainer(BaseTrainer):
             "ent_coef": hparams.ent_coef,
             "vf_coef": hparams.vf_coef,
             "max_grad_norm": hparams.max_grad_norm,
+            "target_kl": hparams.target_kl,
             "verbose": hparams.verbose,
         }
     

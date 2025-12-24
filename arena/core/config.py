@@ -218,6 +218,7 @@ class PPOHyperparams:
     ent_coef: float = 0.005
     vf_coef: float = 1.0
     max_grad_norm: float = 0.5
+    target_kl: float = 0.05  # Early stopping if KL divergence exceeds this threshold
     verbose: int = 1
 
 @dataclass

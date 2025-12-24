@@ -70,13 +70,9 @@ class ArenaRenderer:
         self._draw_projectiles(env.projectiles)
         self._draw_player(env.player)
         
-        # Draw metrics panel
+        # Draw metrics panel (includes action distribution if model output available)
         if training_metrics:
             self._draw_metrics_panel(env, training_metrics)
-            
-        # Draw model output panel (below metrics)
-        if self.model_output:
-            self._draw_model_output_panel()
             
         if self.show_vision:
             self._draw_vision_debug(env)
@@ -243,6 +239,11 @@ class ArenaRenderer:
         fps = int(self.clock.get_fps())
         fps_color = (100, 255, 100) if fps >= 55 else (255, 200, 100) if fps >= 30 else (255, 100, 100)
         self._draw_metric_row(x, y, "FPS", fps, available_width, value_color=fps_color)
+        y += line_height + section_gap
+        
+        # ═══ ACTION SECTION (if model output available) ═══
+        if self.model_output:
+            y = self._draw_action_section(x, y, available_width, line_height)
     
     def _draw_section_header(self, x, y, title, width):
         """Draw a section header with subtle line."""
@@ -276,8 +277,78 @@ class ArenaRenderer:
         value_rect.right = value_x
         value_rect.top = y
         self.screen.blit(value_surface, value_rect)
+    
+    def _draw_action_section(self, x, y, available_width, line_height):
+        """Draw action distribution section integrated into metrics panel."""
+        output = self.model_output
+        if not output:
+            return y
+        
+        # Section header
+        title_text = "ACTION" if not output.is_q_value else "Q-VALUES"
+        y = self._draw_section_header(x, y, title_text, available_width)
+        
+        labels = STYLE_1_LABELS if self.control_style == 1 else STYLE_2_LABELS
+        values = output.action_probs if not output.is_q_value else output.q_values
+        
+        if values is not None:
+            # Normalize Q-values for bar display
+            if output.is_q_value:
+                v_min, v_max = np.min(values), np.max(values)
+                display_probs = (values - v_min) / (v_max - v_min) if v_max > v_min else np.zeros_like(values)
+            else:
+                display_probs = values
+            
+            bar_max_width = available_width - 100
+            bar_height = 12
+            
+            for i, (label, prob) in enumerate(zip(labels, display_probs)):
+                is_selected = i == output.action_taken
+                
+                # Label (compact)
+                label_color = config.COLOR_ACTION_SELECTED if is_selected else (150, 150, 170)
+                txt = self.small_font.render(label[:6], True, label_color)  # Truncate long labels
+                self.screen.blit(txt, (x + 10, y))
+                
+                # Bar background
+                bar_x = x + 60
+                pygame.draw.rect(self.screen, (40, 40, 60), (bar_x, y + 2, bar_max_width, bar_height))
+                
+                # Probability bar
+                bar_width = int(bar_max_width * prob)
+                bar_color = config.COLOR_ACTION_BAR_HIGH if is_selected else config.COLOR_ACTION_BAR_LOW
+                pygame.draw.rect(self.screen, bar_color, (bar_x, y + 2, bar_width, bar_height))
+                
+                # Selection highlight
+                if is_selected:
+                    pygame.draw.rect(self.screen, config.COLOR_ACTION_SELECTED, (bar_x, y + 2, bar_max_width, bar_height), 1)
+                
+                # Value text (right-aligned)
+                val_text = f"{values[i]:.2f}" if output.is_q_value else f"{int(values[i]*100)}%"
+                val_surf = self.small_font.render(val_text, True, config.COLOR_TEXT)
+                val_rect = val_surf.get_rect(right=x + available_width - 15, top=y)
+                self.screen.blit(val_surf, val_rect)
+                
+                y += 18
+        
+        # V-Estimate and Confidence on same line
+        y += 4
+        if output.value is not None:
+            v_color = config.COLOR_VALUE_POSITIVE if output.value >= 0 else config.COLOR_VALUE_NEGATIVE
+            v_text = self.small_font.render(f"V:{output.value:.2f}", True, v_color)
+            self.screen.blit(v_text, (x + 10, y))
+        
+        if output.entropy is not None:
+            n_actions = len(labels)
+            max_entropy = math.log(n_actions)
+            conf_ratio = 1.0 - min(output.entropy / max_entropy, 1.0)
+            e_color = config.COLOR_ENTROPY_HIGH if conf_ratio > 0.7 else config.COLOR_ENTROPY_LOW
+            conf_text = self.small_font.render(f"Conf:{int(conf_ratio*100)}%", True, e_color)
+            self.screen.blit(conf_text, (x + 80, y))
+        
+        return y + line_height
 
-    def _draw_model_output_panel(self):
+    def _draw_model_output_panel(self, y_start=None):
         """Draw model introspection panel."""
         output = self.model_output
         if not output: return
@@ -286,10 +357,8 @@ class ArenaRenderer:
         labels = STYLE_1_LABELS if self.control_style == 1 else STYLE_2_LABELS
         
         x = self.panel_x
-        # Position below the metrics panel. Metrics panel uses ~config.SCREEN_HEIGHT - 30.
-        # Let's split it or use a fixed offset if we know metrics size.
-        # Actually, let's draw it in its own rect, maybe at the bottom half.
-        y_start = 450 
+        # Position below the metrics panel dynamically
+        y_start = y_start if y_start else 400
         panel_rect = pygame.Rect(x - 5, y_start, self.panel_width - 10, 
                                 config.SCREEN_HEIGHT - y_start - 10)
         
