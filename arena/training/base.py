@@ -17,7 +17,7 @@ from arena.core.config import TrainerConfig
 from arena.core import config as arena_config
 from arena.core.device import DeviceManager
 from arena.core.environment import ArenaEnv
-from arena.core.curriculum import CurriculumManager, CurriculumConfig, SpawnerKillRateStrategy
+from arena.core.curriculum import CurriculumManager, CurriculumConfig
 from arena.training.callbacks import (
     ArenaCallback, PerformanceCallback, HParamCallback, 
     CurriculumCallback, LearningRateCallback, CheckpointWithStateCallback
@@ -58,12 +58,8 @@ class BaseTrainer(ABC):
         
         # Initialize curriculum if enabled
         if arena_config.CURRICULUM_ENABLED:
-            strategy = SpawnerKillRateStrategy(
-                threshold=arena_config.CURRICULUM_ADVANCEMENT_THRESHOLD,
-                min_episodes=arena_config.CURRICULUM_MIN_EPISODES
-            )
             self.curriculum_manager = CurriculumManager(
-                CurriculumConfig(enabled=True, strategy=strategy)
+                CurriculumConfig(enabled=True)
             )
         
         # Initialize unified directory structure

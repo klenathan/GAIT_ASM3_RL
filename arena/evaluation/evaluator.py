@@ -77,18 +77,29 @@ class Evaluator:
 
     def _find_vecnormalize_stats(self, model_path: str) -> str:
         """Find VecNormalize stats file matching the model."""
+        import glob
+        
         model_dir = os.path.dirname(model_path)
         model_name = os.path.basename(model_path).replace('.zip', '')
         
         # Extract run prefix (e.g., ppo_style2_20251222_154509)
         parts = model_name.split('_')
         if len(parts) >= 4:
-            # Try to find matching vecnormalize file
+            # Try to find matching vecnormalize file in same directory (new structure)
             run_prefix = '_'.join(parts[:4])  # algo_styleX_YYYYMMDD_HHMMSS
-            pattern = os.path.join(model_dir, f"{run_prefix}_vecnormalize*.pkl")
+            pattern = os.path.join(model_dir, f"{run_prefix}_*_vecnormalize*.pkl")
             matches = sorted(glob.glob(pattern), reverse=True)  # Latest first
             if matches:
                 return matches[0]
+            
+            # Try in parent directory (for new unified structure where checkpoints/ and final/ are separate)
+            parent_dir = os.path.dirname(model_dir)
+            for subdir in ['checkpoints', 'final', '.']:
+                search_dir = os.path.join(parent_dir, subdir) if subdir != '.' else parent_dir
+                pattern = os.path.join(search_dir, f"{run_prefix}_*_vecnormalize*.pkl")
+                matches = sorted(glob.glob(pattern), reverse=True)
+                if matches:
+                    return matches[0]
         
         # Fallback: find any vecnormalize file in the same directory
         pattern = os.path.join(model_dir, "*vecnormalize*.pkl")

@@ -109,7 +109,7 @@ MAX_STEPS = 3000
 STEP_REWARD = 0.1
 REWARD_ENEMY_DESTROYED = 5.0
 REWARD_SPAWNER_DESTROYED = 150.0
-REWARD_PHASE_COMPLETE = 200.0
+REWARD_PHASE_COMPLETE = 100.0
 REWARD_DAMAGE_TAKEN = -2.0  # Base penalty; scaled by curriculum.damage_penalty_mult when curriculum is enabled
 REWARD_DEATH = -150.0
 REWARD_STEP_SURVIVAL = 0.005  # Reduced from 0.02 - engagement should dominate
@@ -217,7 +217,7 @@ class PPOHyperparams:
     learning_rate: float = 3e-4
     n_steps: int = 2048
     batch_size: int = 64
-    n_epochs: int = 5
+    n_epochs: int = 10
     gamma: float = 0.99
     gae_lambda: float = 0.95
     clip_range: float = 0.2

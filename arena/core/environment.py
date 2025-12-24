@@ -64,7 +64,9 @@ class ArenaEnv(gym.Env):
         self.win_step = None
         self.first_spawner_kill_step = None
         
-        self.previous_spawner_distance = None
+        self._prev_spawner_total_health = None
+        self._prev_enemy_count = None
+        self._prev_player_health = None
         self.phase_start_step = 0
     
     @property
@@ -88,6 +90,10 @@ class ArenaEnv(gym.Env):
         self.win = False
         self.win_step = None
         self.first_spawner_kill_step = None
+        
+        self._prev_spawner_total_health = None
+        self._prev_enemy_count = None
+        self._prev_player_health = None
         
         self.player = Player(config.GAME_WIDTH / 2, config.GAME_HEIGHT / 2)
         self.enemies = []
@@ -225,7 +231,9 @@ class ArenaEnv(gym.Env):
             self.spawners.append(spawner)
         
         self.phase_start_step = self.current_step
-        self.previous_spawner_distance = None
+        self._prev_spawner_total_health = None
+        self._prev_enemy_count = None
+        self._prev_player_health = None
     
     def _get_observation(self):
         """Build expanded observation vector (32 dims)."""
@@ -400,25 +408,54 @@ class ArenaEnv(gym.Env):
         return reward
     
     def _calculate_shaping_reward(self):
-        if config.SHAPING_MODE == "off" or not self.spawners: return 0.0
-        near_s = self._find_nearest_entity(self.spawners)
-        if not near_s: return 0.0
-        dist = utils.distance(self.player.pos, near_s.pos)
-        if self.previous_spawner_distance is None:
-            self.previous_spawner_distance = dist; return 0.0
-        prev = self.previous_spawner_distance
-        self.previous_spawner_distance = dist
+        """
+        Combat efficiency shaping: rewards damage dealt while maintaining health.
+        This encourages tactical play rather than reckless rushing.
+        """
+        if config.SHAPING_MODE == "off":
+            return 0.0
         
-        # Get shaping scale with curriculum modifier
+        # Initialize tracking variables on first call or phase reset
+        if self._prev_spawner_total_health is None:
+            self._prev_spawner_total_health = sum(s.health for s in self.spawners if s.alive)
+            self._prev_enemy_count = len([e for e in self.enemies if e.alive])
+            self._prev_player_health = self.player.health
+            return 0.0
+        
+        # Calculate damage dealt this step
+        current_spawner_health = sum(s.health for s in self.spawners if s.alive)
+        spawner_damage = max(0, self._prev_spawner_total_health - current_spawner_health)
+        
+        # Enemy kills also count (they respawn, so count is more relevant than health)
+        enemy_kills_this_step = self.enemies_destroyed_this_step
+        
+        # Total offensive progress
+        offensive_score = spawner_damage + (enemy_kills_this_step * config.ENEMY_HEALTH * 0.1)
+        
+        # Damage taken this step
+        player_damage_taken = max(0, self._prev_player_health - self.player.health)
+        
+        # Health preservation bonus (staying healthy is good)
+        health_ratio = self.player.get_health_ratio()
+        
+        # Combat efficiency = offense weighted by defense
+        # High health = full offensive value, low health = reduced value
+        # Also penalize for getting hit this step
+        efficiency = (offensive_score * (0.5 + 0.5 * health_ratio)) - (player_damage_taken * 1.5)
+        
+        # Update trackers
+        self._prev_spawner_total_health = current_spawner_health
+        self._prev_enemy_count = len([e for e in self.enemies if e.alive])
+        self._prev_player_health = self.player.health
+        
+        # Apply curriculum scaling
         shaping_scale = config.SHAPING_SCALE
         if self.curriculum_stage:
             shaping_scale *= self.curriculum_stage.shaping_scale_mult
         
-        if config.SHAPING_MODE == "binary":
-            return float(shaping_scale) if dist < prev else 0.0
-        max_dist = math.sqrt(config.GAME_WIDTH**2 + config.GAME_HEIGHT**2)
-        delta = (prev - dist) / max_dist
-        return float(np.clip(shaping_scale * delta, -config.SHAPING_CLIP, config.SHAPING_CLIP))
+        # Normalize and scale
+        reward = (efficiency / config.PROJECTILE_DAMAGE) * shaping_scale
+        return float(np.clip(reward, -config.SHAPING_CLIP, config.SHAPING_CLIP))
     
     def _get_info(self):
         return {

@@ -57,27 +57,66 @@ class Menu:
         self.hovered_model_idx = -1
         
     def _scan_models(self):
-        """Scan models directory for .zip files."""
+        """Scan both new runs directory and legacy models directory for .zip files."""
         models = []
-        if not os.path.exists(self.models_dir):
-            return []
         
-        for algo in self.algos:
-            for style in [1, 2]:
-                style_dir = os.path.join(self.models_dir, algo, f"style{style}")
-                if not os.path.exists(style_dir):
+        # Scan new unified runs directory structure
+        # Structure: ./runs/{algo}/style{style}/{run_name}/checkpoints/ and /final/
+        runs_dir = config.RUNS_DIR
+        if os.path.exists(runs_dir):
+            for algo in self.algos:
+                algo_dir = os.path.join(runs_dir, algo)
+                if not os.path.exists(algo_dir):
                     continue
-                for f in os.listdir(style_dir):
-                    if f.endswith(".zip"):
-                        full_path = os.path.join(style_dir, f)
-                        mtime = os.path.getmtime(full_path)
-                        models.append({
-                            "name": f[:-4],
-                            "path": full_path,
-                            "algo": algo,
-                            "style": style,
-                            "mtime": mtime,
-                        })
+                    
+                for style in [1, 2]:
+                    style_dir = os.path.join(algo_dir, f"style{style}")
+                    if not os.path.exists(style_dir):
+                        continue
+                    
+                    # Iterate through run directories
+                    for run_name in os.listdir(style_dir):
+                        run_path = os.path.join(style_dir, run_name)
+                        if not os.path.isdir(run_path):
+                            continue
+                        
+                        # Check both checkpoints/ and final/ subdirectories
+                        for subdir in ['checkpoints', 'final']:
+                            subdir_path = os.path.join(run_path, subdir)
+                            if not os.path.exists(subdir_path):
+                                continue
+                            
+                            for f in os.listdir(subdir_path):
+                                if f.endswith('.zip'):
+                                    full_path = os.path.join(subdir_path, f)
+                                    mtime = os.path.getmtime(full_path)
+                                    models.append({
+                                        'name': f[:-4],
+                                        'path': full_path,
+                                        'algo': algo,
+                                        'style': style,
+                                        'mtime': mtime,
+                                    })
+        
+        # Also scan legacy models directory for backward compatibility
+        legacy_models_dir = config.MODEL_SAVE_DIR
+        if os.path.exists(legacy_models_dir):
+            for algo in self.algos:
+                for style in [1, 2]:
+                    style_dir = os.path.join(legacy_models_dir, algo, f"style{style}")
+                    if not os.path.exists(style_dir):
+                        continue
+                    for f in os.listdir(style_dir):
+                        if f.endswith(".zip"):
+                            full_path = os.path.join(style_dir, f)
+                            mtime = os.path.getmtime(full_path)
+                            models.append({
+                                "name": f[:-4],
+                                "path": full_path,
+                                "algo": algo,
+                                "style": style,
+                                "mtime": mtime,
+                            })
         
         models.sort(key=lambda x: x["mtime"], reverse=True)
         return models

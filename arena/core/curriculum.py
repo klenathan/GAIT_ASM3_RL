@@ -95,13 +95,51 @@ class CompositeStrategy(AdvancementStrategy):
         return f"Composite({logic}: {names})"
 
 
+class StageBasedStrategy(AdvancementStrategy):
+    """
+    Advancement strategy that uses criteria defined in the current CurriculumStage.
+    This ensures each stage can have unique, progressively harder requirements.
+    """
+    
+    def __init__(self, curriculum_manager: 'CurriculumManager'):
+        self.curriculum_manager = curriculum_manager
+    
+    def should_advance(self, metrics: 'CurriculumMetrics') -> bool:
+        stage = self.curriculum_manager.current_stage
+        
+        # Check minimum episodes requirement
+        if len(metrics.spawner_kills) < stage.min_episodes:
+            return False
+        
+        # Check all criteria (using last 100 episodes average)
+        window = min(100, len(metrics.spawner_kills))
+        
+        spawner_kill_rate = np.mean(metrics.spawner_kills[-window:])
+        win_rate = np.mean(metrics.wins[-window:])
+        avg_survival = np.mean(metrics.episode_lengths[-window:])
+        
+        # All criteria must be met
+        criteria_met = (
+            spawner_kill_rate >= stage.min_spawner_kill_rate and
+            win_rate >= stage.min_win_rate and
+            avg_survival >= stage.min_survival_steps
+        )
+        
+        return criteria_met
+    
+    def get_name(self) -> str:
+        stage = self.curriculum_manager.current_stage
+        return (f"StageBased(spawners>={stage.min_spawner_kill_rate}, "
+                f"winrate>={stage.min_win_rate}, survival>={stage.min_survival_steps})")
+
+
 # =============================================================================
 # DATA STRUCTURES
 # =============================================================================
 
 @dataclass
 class CurriculumStage:
-    """Defines difficulty modifiers for a curriculum stage."""
+    """Defines difficulty modifiers and advancement criteria for a curriculum stage."""
     name: str
     spawn_cooldown_mult: float = 1.0   # Higher = slower spawns
     max_enemies_mult: float = 1.0      # Lower = fewer enemies
@@ -109,6 +147,12 @@ class CurriculumStage:
     enemy_speed_mult: float = 1.0      # Lower = slower enemies
     shaping_scale_mult: float = 1.0    # Higher = stronger guidance
     damage_penalty_mult: float = 1.0   # Higher = more severe damage penalties
+    
+    # Advancement criteria (configurable per stage)
+    min_spawner_kill_rate: float = 0.3    # Required avg spawner kills per episode
+    min_win_rate: float = 0.0             # Required win rate to advance
+    min_survival_steps: int = 500         # Required avg episode length
+    min_episodes: int = 50                # Minimum episodes before advancement check
     
     def __repr__(self):
         return f"Stage({self.name})"
@@ -144,12 +188,11 @@ class CurriculumConfig:
     def __post_init__(self):
         if not self.stages:
             self.stages = get_default_stages()
-        if self.strategy is None:
-            self.strategy = SpawnerKillRateStrategy(threshold=0.3)
+        # Note: strategy will be set by CurriculumManager to use StageBasedStrategy
 
 
 def get_default_stages() -> List[CurriculumStage]:
-    """Return default 5-stage curriculum progression."""
+    """Return default 5-stage curriculum progression with gradually increasing difficulty."""
     return [
         CurriculumStage(
             name="Beginner",
@@ -158,7 +201,12 @@ def get_default_stages() -> List[CurriculumStage]:
             spawner_health_mult=0.5,
             enemy_speed_mult=0.8,
             shaping_scale_mult=3.0,
-            damage_penalty_mult=0.5,  # Gentler penalties: -1.0 instead of -2.0
+            damage_penalty_mult=0.5, 
+            # Stage 0 -> 1: Easy requirements
+            min_spawner_kill_rate=0.5,    
+            min_win_rate=0.0,            
+            min_survival_steps=300,      
+            min_episodes=50,            
         ),
         CurriculumStage(
             name="Easy",
@@ -167,7 +215,12 @@ def get_default_stages() -> List[CurriculumStage]:
             spawner_health_mult=0.7,
             enemy_speed_mult=0.9,
             shaping_scale_mult=2.0,
-            damage_penalty_mult=1.0,  # Normal penalties: -2.0
+            damage_penalty_mult=1.0,  
+            # Stage 1 -> 2: Moderate requirements
+            min_spawner_kill_rate=1.0,   
+            min_win_rate=0.05,          
+            min_survival_steps=500,      
+            min_episodes=100,           
         ),
         CurriculumStage(
             name="Medium",
@@ -176,7 +229,12 @@ def get_default_stages() -> List[CurriculumStage]:
             spawner_health_mult=0.85,
             enemy_speed_mult=0.95,
             shaping_scale_mult=1.5,
-            damage_penalty_mult=1.5,  # Moderate increase: -3.0
+            damage_penalty_mult=1.5,  
+            # Stage 2 -> 3: Getting harder
+            min_spawner_kill_rate=1.5,   
+            min_win_rate=0.2,           
+            min_survival_steps=750,      
+            min_episodes=150,
         ),
         CurriculumStage(
             name="Hard",
@@ -185,7 +243,12 @@ def get_default_stages() -> List[CurriculumStage]:
             spawner_health_mult=0.95,
             enemy_speed_mult=1.0,
             shaping_scale_mult=1.2,
-            damage_penalty_mult=2.5,  # Significant penalty: -5.0
+            damage_penalty_mult=2.5,
+            # Stage 3 -> 4: Challenging requirements
+            min_spawner_kill_rate=2.0,   
+            min_win_rate=0.3,           
+            min_survival_steps=1000,     
+            min_episodes=200,
         ),
         CurriculumStage(
             name="Expert",
@@ -194,7 +257,26 @@ def get_default_stages() -> List[CurriculumStage]:
             spawner_health_mult=1.0,
             enemy_speed_mult=1.0,
             shaping_scale_mult=1.0,
-            damage_penalty_mult=4.0,  # Severe penalty: -8.0
+            damage_penalty_mult=4.0,  
+            # Final stage - no advancement needed
+            min_spawner_kill_rate=3.0, 
+            min_win_rate=0.5,
+            min_survival_steps=2000,
+            min_episodes=300,
+        ),
+        CurriculumStage(
+            name="Master",
+            spawn_cooldown_mult=1.0,
+            max_enemies_mult=1.0,
+            spawner_health_mult=1.0,
+            enemy_speed_mult=1.0,
+            shaping_scale_mult=0.2,
+            damage_penalty_mult=5.0,  
+            # Final stage - no advancement needed
+            min_spawner_kill_rate=3.0, 
+            min_win_rate=0.8,
+            min_survival_steps=2000,
+            min_episodes=300,
         ),
     ]
 
@@ -227,6 +309,10 @@ class CurriculumManager:
         self.current_stage_index = 0
         self.metrics = CurriculumMetrics()
         self._advancement_callbacks: List[Callable[[int, CurriculumStage], None]] = []
+        
+        # Set StageBasedStrategy as default if no strategy is configured
+        if self.config.strategy is None:
+            self.config.strategy = StageBasedStrategy(self)
     
     @property
     def enabled(self) -> bool:
