@@ -110,9 +110,9 @@ STEP_REWARD = 0.1
 REWARD_ENEMY_DESTROYED = 5.0
 REWARD_SPAWNER_DESTROYED = 150.0
 REWARD_PHASE_COMPLETE = 100.0
-REWARD_DAMAGE_TAKEN = -2.0  # Base penalty; scaled by curriculum.damage_penalty_mult when curriculum is enabled
+REWARD_DAMAGE_TAKEN = -2.0  
 REWARD_DEATH = -150.0
-REWARD_STEP_SURVIVAL = 0.005  # Reduced from 0.02 - engagement should dominate
+REWARD_STEP_SURVIVAL = 0.01
 REWARD_HIT_ENEMY = 2.0
 REWARD_HIT_SPAWNER = 10.0
 REWARD_SHOT_FIRED = 0.0
@@ -127,7 +127,7 @@ INACTIVITY_VELOCITY_THRESHOLD = 0.5 # Minimum velocity magnitude to be "active"
 # Reward Shaping
 SHAPING_MODE = "delta"  # Simpler selection
 SHAPING_SCALE = 1.0
-SHAPING_CLIP = 0.1
+SHAPING_CLIP = 0.2
 
 # Curriculum Learning
 CURRICULUM_ENABLED = True
@@ -185,7 +185,7 @@ class TrainerConfig:
     dqn_activation: str = "SiLU"
     
     # PPO specific
-    ppo_net_arch: Dict[str, List[int]] = field(default_factory=lambda: dict(pi=[256, 128, 64], vf=[256, 128, 64]))
+    ppo_net_arch: Dict[str, List[int]] = field(default_factory=lambda: dict(pi=[128, 64], vf=[128, 64]))
     ppo_activation: str = "SiLU"
     
     # LSTM specific
@@ -221,11 +221,11 @@ class PPOHyperparams:
     gamma: float = 0.99
     gae_lambda: float = 0.95
     clip_range: float = 0.2
-    ent_coef: float = 0.005
+    ent_coef: float = 0.05
     vf_coef: float = 1.0
     max_grad_norm: float = 0.5
-    target_kl: float = 0.1
-    verbose: int = 1
+    target_kl: float = 0.5
+    verbose: int = 0
 
 @dataclass
 class A2CHyperparams:

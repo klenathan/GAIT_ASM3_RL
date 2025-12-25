@@ -194,89 +194,112 @@ class CurriculumConfig:
 def get_default_stages() -> List[CurriculumStage]:
     """Return default 5-stage curriculum progression with gradually increasing difficulty."""
     return [
+        # Grade 1: Survival Basics
+        # Behavior Focus: Basic movement, staying alive, avoiding damage
+        # Low enemy count, slow enemies, reduced damage penalties, high shaping guidance
         CurriculumStage(
-            name="Beginner",
-            spawn_cooldown_mult=2.0,
-            max_enemies_mult=0.4,
-            spawner_health_mult=0.5,
-            enemy_speed_mult=0.8,
-            shaping_scale_mult=3.0,
-            damage_penalty_mult=0.5, 
-            # Stage 0 -> 1: Easy requirements
-            min_spawner_kill_rate=0.5,    
-            min_win_rate=0.0,            
-            min_survival_steps=300,      
-            min_episodes=50,            
+            name="Grade 1: Survival Basics",
+            spawn_cooldown_mult=2.5,      # Very slow spawns - less pressure
+            max_enemies_mult=0.3,         # Very few enemies - focus on survival
+            spawner_health_mult=0.4,      # Easy spawners (but not the focus yet)
+            enemy_speed_mult=0.2,         # Slow enemies - easier to avoid
+            shaping_scale_mult=4.0,       # High guidance for basic movement
+            damage_penalty_mult=0.3,      # Low damage penalty - encourage exploration
+            # Advancement: Must survive consistently
+            min_spawner_kill_rate=0.0,    # Spawner kills not required
+            min_win_rate=0.0,             # Wins not required
+            min_survival_steps=400,       # Must survive ~400 steps consistently
+            min_episodes=50,
         ),
+        
+        # Grade 2: Enemy Elimination
+        # Behavior Focus: Targeting and destroying enemies
+        # More enemies, moderate speed, emphasis on enemy kills
         CurriculumStage(
-            name="Easy",
-            spawn_cooldown_mult=1.5,
-            max_enemies_mult=0.6,
-            spawner_health_mult=0.7,
-            enemy_speed_mult=0.9,
-            shaping_scale_mult=2.0,
-            damage_penalty_mult=1.0,  
-            # Stage 1 -> 2: Moderate requirements
-            min_spawner_kill_rate=1.0,   
-            min_win_rate=0.05,          
-            min_survival_steps=500,      
-            min_episodes=100,           
+            name="Grade 2: Enemy Elimination",
+            spawn_cooldown_mult=2.0,      # Slower spawns - focus on existing enemies
+            max_enemies_mult=0.5,         # More enemies to practice on
+            spawner_health_mult=0.5,      # Still easy spawners
+            enemy_speed_mult=0.85,        # Moderate speed
+            shaping_scale_mult=3.0,       # Good guidance for combat
+            damage_penalty_mult=0.6,      # Moderate penalty - learn to fight safely
+            # Advancement: Must kill enemies consistently
+            min_spawner_kill_rate=0.0,    # Spawners still not focus
+            min_win_rate=0.0,             # Wins not required
+            min_survival_steps=600,       # Longer survival with combat
+            min_episodes=75,
         ),
+        
+        # Grade 3: Spawner Targeting
+        # Behavior Focus: Destroying spawners to progress phases
+        # Spawners are primary targets, moderate difficulty
         CurriculumStage(
-            name="Medium",
-            spawn_cooldown_mult=1.25,
-            max_enemies_mult=0.8,
-            spawner_health_mult=0.85,
-            enemy_speed_mult=0.95,
-            shaping_scale_mult=1.5,
-            damage_penalty_mult=1.5,  
-            # Stage 2 -> 3: Getting harder
-            min_spawner_kill_rate=1.5,   
-            min_win_rate=0.2,           
-            min_survival_steps=750,      
+            name="Grade 3: Spawner Targeting",
+            spawn_cooldown_mult=1.8,      # Faster spawns - spawners matter
+            max_enemies_mult=0.6,         # More enemies from spawners
+            spawner_health_mult=0.65,     # Moderate spawner health
+            enemy_speed_mult=0.9,         # Faster enemies
+            shaping_scale_mult=2.5,       # Guidance for spawner focus
+            damage_penalty_mult=0.9,      # Higher penalty - be careful
+            # Advancement: Must kill spawners consistently
+            min_spawner_kill_rate=0.8,    # Must kill spawners regularly
+            min_win_rate=0.0,             # Wins not required yet
+            min_survival_steps=800,       # Good survival while targeting spawners
+            min_episodes=100,
+        ),
+        
+        # Grade 4: Multi-Target Management
+        # Behavior Focus: Handling multiple threats simultaneously
+        # More enemies, faster spawns, need to balance priorities
+        CurriculumStage(
+            name="Grade 4: Multi-Target Management",
+            spawn_cooldown_mult=1.4,      # Faster spawns - more pressure
+            max_enemies_mult=0.75,        # Many enemies at once
+            spawner_health_mult=0.8,      # Harder spawners
+            enemy_speed_mult=0.95,        # Fast enemies
+            shaping_scale_mult=1.8,       # Less guidance - more independent
+            damage_penalty_mult=1.2,      # Significant penalty
+            # Advancement: Must handle multiple targets and kill spawners
+            min_spawner_kill_rate=1.5,    # Multiple spawner kills
+            min_win_rate=0.1,             # Some wins required
+            min_survival_steps=1000,      # Long survival with many threats
             min_episodes=150,
         ),
+        
+        # Grade 5: Tactical Combat
+        # Behavior Focus: Advanced tactics, health management, efficiency
+        # High difficulty, need to be efficient and tactical
         CurriculumStage(
-            name="Hard",
-            spawn_cooldown_mult=1.1,
-            max_enemies_mult=0.9,
-            spawner_health_mult=0.95,
-            enemy_speed_mult=1.0,
-            shaping_scale_mult=1.2,
-            damage_penalty_mult=2.5,
-            # Stage 3 -> 4: Challenging requirements
-            min_spawner_kill_rate=2.0,   
-            min_win_rate=0.3,           
-            min_survival_steps=1000,     
+            name="Grade 5: Tactical Combat",
+            spawn_cooldown_mult=1.2,      # Fast spawns
+            max_enemies_mult=0.9,         # Many enemies
+            spawner_health_mult=0.95,     # Hard spawners
+            enemy_speed_mult=1.0,         # Full speed
+            shaping_scale_mult=1.2,       # Minimal guidance - tactical thinking
+            damage_penalty_mult=1.5,      # High penalty - avoid damage
+            # Advancement: Must win consistently with good tactics
+            min_spawner_kill_rate=2.0,    # Many spawner kills
+            min_win_rate=0.25,            # Good win rate
+            min_survival_steps=1200,      # Long survival
             min_episodes=200,
         ),
+        
+        # Grade 6: Mastery
+        # Behavior Focus: Optimization, high performance, quick completion
+        # Full difficulty, minimal guidance, high performance required
         CurriculumStage(
-            name="Expert",
-            spawn_cooldown_mult=1.0,
-            max_enemies_mult=1.0,
-            spawner_health_mult=1.0,
-            enemy_speed_mult=1.0,
-            shaping_scale_mult=1.0,
-            damage_penalty_mult=4.0,  
-            # Final stage - no advancement needed
-            min_spawner_kill_rate=3.0, 
-            min_win_rate=0.5,
-            min_survival_steps=2000,
-            min_episodes=300,
-        ),
-        CurriculumStage(
-            name="Master",
-            spawn_cooldown_mult=1.0,
-            max_enemies_mult=1.0,
-            spawner_health_mult=1.0,
-            enemy_speed_mult=1.0,
-            shaping_scale_mult=0.2,
-            damage_penalty_mult=5.0,  
-            # Final stage - no advancement needed
-            min_spawner_kill_rate=3.0, 
-            min_win_rate=0.8,
-            min_survival_steps=2000,
-            min_episodes=300,
+            name="Grade 6: Mastery",
+            spawn_cooldown_mult=1.0,      # Full spawn rate
+            max_enemies_mult=1.0,         # Maximum enemies
+            spawner_health_mult=1.0,      # Full spawner health
+            enemy_speed_mult=1.0,         # Full enemy speed
+            shaping_scale_mult=0.8,       # Minimal shaping - pure performance
+            damage_penalty_mult=1.8,      # Maximum penalty - perfection required
+            # Final stage - very high requirements
+            min_spawner_kill_rate=3.0,    # Excellent spawner kill rate
+            min_win_rate=0.5,             # High win rate
+            min_survival_steps=1500,      # Excellent survival
+            min_episodes=250,
         ),
     ]
 

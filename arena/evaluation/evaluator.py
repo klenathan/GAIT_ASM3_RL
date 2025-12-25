@@ -2,6 +2,10 @@
 Model evaluation logic for Deep RL Arena.
 """
 
+import warnings
+# Suppress pkg_resources deprecation warning from pygame
+warnings.filterwarnings("ignore", message=".*pkg_resources is deprecated.*", category=UserWarning)
+
 import os
 import glob
 import pygame
@@ -14,6 +18,7 @@ from arena.core.config import TrainerConfig
 from arena.core.device import DeviceManager
 from arena.core import config
 from arena.core.environment import ArenaEnv
+from arena.core.environment_dict import ArenaDictEnv
 from arena.ui.renderer import ArenaRenderer
 from arena.ui.menu import Menu
 from arena.ui.model_output import ModelOutputExtractor
@@ -31,6 +36,7 @@ class Evaluator:
         self.model = None
         self.is_recurrent = False
         self.output_extractor = ModelOutputExtractor()
+        self.current_algo = None
         
     def setup_ui(self):
         """Initialize renderer and menu."""
@@ -59,6 +65,7 @@ class Evaluator:
             algo_class = trainer_class.algorithm_class
             self.model = algo_class.load(model_path, device=self.device)
             self.is_recurrent = "Lstm" in trainer_class.policy_type
+            self.current_algo = algo
             return True
         except Exception as e:
             print(f"Failed to load as {algo}: {e}")
@@ -70,6 +77,7 @@ class Evaluator:
                     algo_class = trainer_class.algorithm_class
                     self.model = algo_class.load(model_path, device=self.device)
                     self.is_recurrent = "Lstm" in trainer_class.policy_type
+                    self.current_algo = other_algo
                     print(f"Successfully loaded as {other_algo}")
                     return True
                 except: continue
@@ -113,8 +121,11 @@ class Evaluator:
             
         if self.env: self.env.close()
         
-        # Create base environment
-        base_env = ArenaEnv(control_style=style, render_mode=None)
+        # Create base environment - use ArenaDictEnv for ppo_dict, ArenaEnv for others
+        if self.current_algo == "ppo_dict":
+            base_env = ArenaDictEnv(control_style=style, render_mode=None)
+        else:
+            base_env = ArenaEnv(control_style=style, render_mode=None)
         base_env.render_mode = "human"
         base_env.renderer = self.renderer
         base_env._owns_renderer = False
@@ -166,10 +177,19 @@ class Evaluator:
             
             # Get scalar action for visualization (VecEnv returns arrays)
             action_scalar = action[0] if isinstance(action, np.ndarray) else action
+            
+            # Extract observation for single env (VecEnv returns arrays/dicts with batch dimension)
+            if isinstance(obs, dict):
+                # Dict observation: extract first element from each dict value
+                obs_single = {key: value[0] if isinstance(value, np.ndarray) else value 
+                             for key, value in obs.items()}
+            else:
+                # Array observation: extract first element
+                obs_single = obs[0]
                 
             # Extract and visualize model output (use first element for single env)
             output = self.output_extractor.extract(
-                self.model, obs[0], action_scalar, 
+                self.model, obs_single, action_scalar, 
                 lstm_states=lstm_states, 
                 episode_start=episode_start
             )

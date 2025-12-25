@@ -2,6 +2,10 @@
 In-game menu for evaluation configuration.
 """
 
+import warnings
+# Suppress pkg_resources deprecation warning from pygame
+warnings.filterwarnings("ignore", message=".*pkg_resources is deprecated.*", category=UserWarning)
+
 import pygame
 import os
 from arena.core import config
