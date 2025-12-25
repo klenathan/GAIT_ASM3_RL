@@ -136,7 +136,7 @@ CURRICULUM_MIN_EPISODES = 100            # Min episodes before advancing
 CURRICULUM_WINDOW = 100                 # Episodes for averaging
 
 # Parallel Environments
-NUM_ENVS_DEFAULT_MPS = 4
+NUM_ENVS_DEFAULT_MPS = 20
 NUM_ENVS_DEFAULT_CUDA = 20
 NUM_ENVS_DEFAULT_CPU = 12
 

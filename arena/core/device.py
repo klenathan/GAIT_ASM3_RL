@@ -75,7 +75,8 @@ class DeviceManager:
         from arena.core.config import NUM_ENVS_DEFAULT_MPS, NUM_ENVS_DEFAULT_CUDA, NUM_ENVS_DEFAULT_CPU
         
         if device == "mps":
-            return NUM_ENVS_DEFAULT_MPS
+            cpu_count = os.cpu_count() or 4
+            return int(min(NUM_ENVS_DEFAULT_MPS, max(2, cpu_count // 2)))
         elif device == "cuda":
             cpu_count = os.cpu_count() or 4
             return int(min(NUM_ENVS_DEFAULT_CUDA, max(2, cpu_count // 2)))
