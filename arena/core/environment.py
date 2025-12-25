@@ -208,6 +208,11 @@ class ArenaEnv(gym.Env):
         phase_cfg = config.PHASE_CONFIG[self.current_phase]
         num = phase_cfg['spawners']
         self.enemies = []
+        
+        # # Restore player health when advancing to new phase (level up)
+        # if self.current_phase > 0:  # Don't reset on initial phase (episode start)
+        #     self.player.health = self.player.max_health
+        
         base_angle = self.np_random.uniform(0, 2 * math.pi)
         
         for i in range(num):
@@ -430,7 +435,7 @@ class ArenaEnv(gym.Env):
         enemy_kills_this_step = self.enemies_destroyed_this_step
         
         # Total offensive progress
-        offensive_score = spawner_damage + (enemy_kills_this_step * config.ENEMY_HEALTH * 0.1)
+        offensive_score = spawner_damage + (enemy_kills_this_step * config.ENEMY_HEALTH * 0.5)
         
         # Damage taken this step
         player_damage_taken = max(0, self._prev_player_health - self.player.health)
@@ -441,7 +446,7 @@ class ArenaEnv(gym.Env):
         # Combat efficiency = offense weighted by defense
         # High health = full offensive value, low health = reduced value
         # Also penalize for getting hit this step
-        efficiency = (offensive_score * (0.5 + 0.5 * health_ratio)) - (player_damage_taken * 1.5)
+        efficiency = (offensive_score * (0.5 + 0.5 * health_ratio)) - (player_damage_taken * 0.8)
         
         # Update trackers
         self._prev_spawner_total_health = current_spawner_health
@@ -454,7 +459,7 @@ class ArenaEnv(gym.Env):
             shaping_scale *= self.curriculum_stage.shaping_scale_mult
         
         # Normalize and scale
-        reward = (efficiency / config.PROJECTILE_DAMAGE) * shaping_scale
+        reward = efficiency * shaping_scale * 0.01
         return float(np.clip(reward, -config.SHAPING_CLIP, config.SHAPING_CLIP))
     
     def _get_info(self):

@@ -229,7 +229,7 @@ def get_default_stages() -> List[CurriculumStage]:
             spawner_health_mult=0.85,
             enemy_speed_mult=0.95,
             shaping_scale_mult=1.5,
-            damage_penalty_mult=1.5,  
+            damage_penalty_mult=1.2,  
             # Stage 2 -> 3: Getting harder
             min_spawner_kill_rate=1.5,   
             min_win_rate=0.2,           
@@ -243,7 +243,7 @@ def get_default_stages() -> List[CurriculumStage]:
             spawner_health_mult=0.95,
             enemy_speed_mult=1.0,
             shaping_scale_mult=1.2,
-            damage_penalty_mult=2.5,
+            damage_penalty_mult=1.5,
             # Stage 3 -> 4: Challenging requirements
             min_spawner_kill_rate=2.0,   
             min_win_rate=0.3,           
@@ -257,7 +257,7 @@ def get_default_stages() -> List[CurriculumStage]:
             spawner_health_mult=1.0,
             enemy_speed_mult=1.0,
             shaping_scale_mult=1.0,
-            damage_penalty_mult=4.0,  
+            damage_penalty_mult=1.7,  
             # Final stage - no advancement needed
             min_spawner_kill_rate=3.0, 
             min_win_rate=0.5,
@@ -270,8 +270,8 @@ def get_default_stages() -> List[CurriculumStage]:
             max_enemies_mult=1.0,
             spawner_health_mult=1.0,
             enemy_speed_mult=1.0,
-            shaping_scale_mult=0.2,
-            damage_penalty_mult=5.0,  
+            shaping_scale_mult=0.8,
+            damage_penalty_mult=1.8,  
             # Final stage - no advancement needed
             min_spawner_kill_rate=3.0, 
             min_win_rate=0.8,
