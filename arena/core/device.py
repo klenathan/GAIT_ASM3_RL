@@ -76,9 +76,9 @@ class DeviceManager:
         
         if device == "mps":
             cpu_count = os.cpu_count() or 4
-            return int(min(NUM_ENVS_DEFAULT_MPS, max(2, cpu_count // 2)))
+            return int(min(NUM_ENVS_DEFAULT_MPS, cpu_count))
         elif device == "cuda":
             cpu_count = os.cpu_count() or 4
             return int(min(NUM_ENVS_DEFAULT_CUDA, max(2, cpu_count // 2)))
         else:
-            return NUM_ENVS_DEFAULT_CPU
+            return os.cpu_count() or NUM_ENVS_DEFAULT_CPU
