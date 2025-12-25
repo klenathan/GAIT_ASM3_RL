@@ -1,3 +1,7 @@
+import warnings
+# Suppress pkg_resources deprecation warning from pygame
+warnings.filterwarnings("ignore", message=".*pkg_resources is deprecated.*", category=UserWarning)
+
 import pygame
 from gridworld.config import *
 

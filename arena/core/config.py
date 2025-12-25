@@ -112,7 +112,7 @@ REWARD_SPAWNER_DESTROYED = 150.0
 REWARD_PHASE_COMPLETE = 100.0
 REWARD_DAMAGE_TAKEN = -2.0  
 REWARD_DEATH = -150.0
-REWARD_STEP_SURVIVAL = 0.005  
+REWARD_STEP_SURVIVAL = 0.01
 REWARD_HIT_ENEMY = 2.0
 REWARD_HIT_SPAWNER = 10.0
 REWARD_SHOT_FIRED = 0.0
@@ -185,7 +185,7 @@ class TrainerConfig:
     dqn_activation: str = "SiLU"
     
     # PPO specific
-    ppo_net_arch: Dict[str, List[int]] = field(default_factory=lambda: dict(pi=[256, 128, 64], vf=[256, 128, 64]))
+    ppo_net_arch: Dict[str, List[int]] = field(default_factory=lambda: dict(pi=[128, 64], vf=[128, 64]))
     ppo_activation: str = "SiLU"
     
     # LSTM specific
@@ -221,7 +221,7 @@ class PPOHyperparams:
     gamma: float = 0.99
     gae_lambda: float = 0.95
     clip_range: float = 0.2
-    ent_coef: float = 0.01
+    ent_coef: float = 0.05
     vf_coef: float = 1.0
     max_grad_norm: float = 0.5
     target_kl: float = 0.5

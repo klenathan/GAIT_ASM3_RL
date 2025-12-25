@@ -3,6 +3,10 @@ Beautiful Pygame renderer for the Arena environment.
 Displays game state with on-screen training metrics.
 """
 
+import warnings
+# Suppress pkg_resources deprecation warning from pygame
+warnings.filterwarnings("ignore", message=".*pkg_resources is deprecated.*", category=UserWarning)
+
 import pygame
 import math
 import numpy as np
