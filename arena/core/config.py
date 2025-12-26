@@ -136,7 +136,7 @@ CURRICULUM_MIN_EPISODES = 100            # Min episodes before advancing
 CURRICULUM_WINDOW = 100                 # Episodes for averaging
 
 # Parallel Environments
-NUM_ENVS_DEFAULT_MPS = 4
+NUM_ENVS_DEFAULT_MPS = 20
 NUM_ENVS_DEFAULT_CUDA = 20
 NUM_ENVS_DEFAULT_CPU = 12
 
@@ -214,17 +214,17 @@ class DQNHyperparams:
 
 @dataclass
 class PPOHyperparams:
-    learning_rate: float = 3e-4
-    n_steps: int = 2048
+    learning_rate: float = 1e-4
+    n_steps: int = 4096
     batch_size: int = 64
     n_epochs: int = 10
     gamma: float = 0.99
     gae_lambda: float = 0.95
-    clip_range: float = 0.2
+    clip_range: float = 0.1
     ent_coef: float = 0.05
     vf_coef: float = 1.0
     max_grad_norm: float = 0.5
-    target_kl: float = 0.5
+    target_kl: float = 0.05
     verbose: int = 0
 
 @dataclass

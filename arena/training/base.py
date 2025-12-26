@@ -165,7 +165,7 @@ class BaseTrainer(ABC):
         if len(parts) >= 4:
             # Try to find matching vecnormalize file in same directory (new structure)
             run_prefix = '_'.join(parts[:4])  # algo_styleX_YYYYMMDD_HHMMSS
-            pattern = os.path.join(model_dir, f"{run_prefix}_*_vecnormalize*.pkl")
+            pattern = os.path.join(model_dir, f"{run_prefix}_vecnormalize*.pkl")
             matches = sorted(glob.glob(pattern), reverse=True)  # Latest first
             if matches:
                 return matches[0]
@@ -174,7 +174,7 @@ class BaseTrainer(ABC):
             parent_dir = os.path.dirname(model_dir)
             for subdir in ['checkpoints', 'final', '.']:
                 search_dir = os.path.join(parent_dir, subdir) if subdir != '.' else parent_dir
-                pattern = os.path.join(search_dir, f"{run_prefix}_*_vecnormalize*.pkl")
+                pattern = os.path.join(search_dir, f"{run_prefix}_vecnormalize*.pkl")
                 matches = sorted(glob.glob(pattern), reverse=True)
                 if matches:
                     return matches[0]
@@ -200,14 +200,14 @@ class BaseTrainer(ABC):
         if self.config.load_vecnormalize:
             vecnorm_path = self._find_vecnormalize_stats(model_path)
             if vecnorm_path and os.path.exists(vecnorm_path):
-                print(f"Loading VecNormalize stats: {vecnorm_path}")
+                print(f"✓ Loading VecNormalize stats from: {os.path.basename(vecnorm_path)}")
                 # VecNormalize.load expects the unwrapped vec_env
                 # Get the underlying vec_env from current VecNormalize wrapper
                 unwrapped_env = self.env.venv if isinstance(self.env, VecNormalize) else self.env
                 self.env = VecNormalize.load(vecnorm_path, unwrapped_env)
-                print("VecNormalize stats loaded successfully")
+                print("✓ VecNormalize stats applied successfully (continuing with pretrained normalization)")
             else:
-                print("No VecNormalize stats found, using fresh normalization")
+                print("⚠ No VecNormalize stats found, using fresh normalization (stats will reset)")
 
         # Note: algorithm_class.load() restores weights and algorithm state; we attach the new env.
         # We also set tensorboard_log so continuing training logs to the current run directory.
