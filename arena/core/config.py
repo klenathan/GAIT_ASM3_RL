@@ -243,11 +243,18 @@ class A2CHyperparams:
 
 @dataclass
 class PPOLSTMHyperparams(PPOHyperparams):
-    learning_rate: float = 1e-4
-    n_steps: int = 512
-    batch_size: int = 32
-    n_epochs: int = 5
-    ent_coef: float = 0.05
+    learning_rate: float = 1e-4 
+    n_steps: int = 512 
+    batch_size: int = 32 
+    n_epochs: int = 5 
+    gamma: float = 0.99
+    gae_lambda: float = 0.98 
+    clip_range: float = 0.2
+    ent_coef: float = 0.05 
+    vf_coef: float = 1.0
+    max_grad_norm: float = 0.5 
+    target_kl: float = 0.08
+    verbose: int = 0
 
 # Default hyperparameter instances (equivalent to old config)
 DQN_DEFAULT = DQNHyperparams()

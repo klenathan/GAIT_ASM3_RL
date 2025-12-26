@@ -100,16 +100,33 @@ class ModelOutputExtractor:
                     # Actor-Critic: Get distribution and value
                     if hasattr(model, "policy"):
                         try:
-                            if "lstm" in algo_name or (hasattr(model.policy, "recurrent_initial_state") and lstm_states is not None):
-                                # Recurrent models
-                                # For simplified extraction, we use the policy features
-                                # Proper extraction requires passing hidden states
-                                # SB3 RecurrentPPO policy.get_distribution takes obs, lstm_states, episode_start
-                                dist = model.policy.get_distribution(obs_tensor, lstm_states, episode_start)
-                                latent_pi, latent_vf, _ = model.policy.get_latent_features(obs_tensor, lstm_states, episode_start)
+                            # Check if this is a recurrent model (RecurrentPPO)
+                            is_recurrent = ("lstm" in algo_name or 
+                                          (hasattr(model.policy, "recurrent_initial_state") and 
+                                           lstm_states is not None))
+                            
+                            if is_recurrent:
+                                # Recurrent models (RecurrentPPO with LSTM)
+                                # Convert episode_start to proper format if needed
+                                # RecurrentPPO expects episode_start as numpy array matching batch size
+                                if episode_start is not None:
+                                    if isinstance(episode_start, (bool, np.bool_)):
+                                        ep_start = np.array([episode_start])
+                                    elif isinstance(episode_start, np.ndarray):
+                                        ep_start = episode_start
+                                    else:
+                                        ep_start = np.array([bool(episode_start)])
+                                else:
+                                    # Default to False if not provided
+                                    ep_start = np.array([False])
+                                
+                                # Get distribution and value with LSTM states
+                                # lstm_states can be None (triggers initialization) or tuple of (h, c) states
+                                dist = model.policy.get_distribution(obs_tensor, lstm_states, ep_start)
+                                latent_pi, latent_vf, _ = model.policy.get_latent_features(obs_tensor, lstm_states, ep_start)
                                 value = model.policy.value_net(latent_vf)
                             else:
-                                # Standard MLP models or MultiInputPolicy
+                                # Standard MLP models or MultiInputPolicy (non-recurrent)
                                 dist = model.policy.get_distribution(obs_tensor)
                                 value = model.policy.predict_values(obs_tensor)
                             

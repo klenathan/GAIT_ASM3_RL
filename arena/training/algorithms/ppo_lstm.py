@@ -13,17 +13,36 @@ from arena.training.schedules import get_lr_schedule
 
 @AlgorithmRegistry.register("ppo_lstm")
 class PPOLSTMTrainer(BaseTrainer):
-    """Recurrent PPO trainer using LSTM."""
+    """
+    Recurrent PPO trainer using LSTM.
+    
+    Uses RecurrentPPO from sb3_contrib which maintains LSTM hidden states
+    across timesteps within an episode. This is beneficial for partially
+    observable environments where the agent needs memory.
+    
+    Key differences from standard PPO:
+    - Uses MlpLstmPolicy instead of MlpPolicy
+    - Shorter rollouts (n_steps=512 vs 2048) due to memory requirements
+    - Smaller batch sizes (32/64 vs 64/256) for efficiency
+    - LSTM states are automatically managed during training
+    """
     
     algorithm_name = "ppo_lstm"
     algorithm_class = RecurrentPPO
     policy_type = "MlpLstmPolicy"
     
     def get_hyperparameters(self) -> Dict[str, Any]:
-        """Get hyperparameters based on device."""
+        """
+        Get hyperparameters based on device.
+        
+        RecurrentPPO uses the same hyperparameters as PPO, but with
+        adjusted defaults (shorter rollouts, smaller batches) to account
+        for the additional memory requirements of LSTM.
+        """
         hparams = PPO_LSTM_GPU_DEFAULT if self._is_gpu() else PPO_LSTM_DEFAULT
         
         # Ensure batch size is valid for the rollout size
+        # RecurrentPPO requires batch_size to divide (n_steps * num_envs)
         batch_size = self._pick_valid_batch_size(
             hparams.batch_size, 
             hparams.n_steps
@@ -53,7 +72,16 @@ class PPOLSTMTrainer(BaseTrainer):
         }
     
     def get_policy_kwargs(self) -> Dict[str, Any]:
-        """Get net architecture, LSTM params and activation."""
+        """
+        Get net architecture, LSTM params and activation.
+        
+        Returns policy configuration including:
+        - net_arch: MLP layers before LSTM
+        - lstm_hidden_size: Size of LSTM hidden state
+        - n_lstm_layers: Number of stacked LSTM layers
+        - ortho_init: Orthogonal initialization for stability
+        - activation_fn: Activation function for MLP layers
+        """
         return {
             "net_arch": self.config.ppo_lstm_net_arch,
             "lstm_hidden_size": self.config.ppo_lstm_hidden_size,

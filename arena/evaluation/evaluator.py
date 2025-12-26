@@ -147,7 +147,12 @@ class Evaluator:
         obs = self.env.reset()
         if isinstance(obs, tuple):
             obs = obs[0]  # Handle new gym API
+        
+        # Initialize LSTM states for recurrent models
+        # RecurrentPPO expects lstm_states=None initially, which triggers initialization
         lstm_states = None
+        # episode_start flag: True at episode start, False otherwise
+        # VecEnv expects array matching num_envs (1 in our case)
         episode_start = np.array([True])
         
         running = True
@@ -169,10 +174,13 @@ class Evaluator:
             
             # Predict action (obs is already an array from VecEnv)
             if self.is_recurrent:
+                # RecurrentPPO: pass lstm_states and episode_start flag
+                # lstm_states=None triggers initialization on first call or after reset
                 action, lstm_states = self.model.predict(
                     obs, state=lstm_states, episode_start=episode_start, deterministic=deterministic
                 )
             else:
+                # Non-recurrent: standard prediction
                 action, _ = self.model.predict(obs, deterministic=deterministic)
             
             # Get scalar action for visualization (VecEnv returns arrays)
@@ -188,24 +196,31 @@ class Evaluator:
                 obs_single = obs[0]
                 
             # Extract and visualize model output (use first element for single env)
+            # For recurrent models, pass lstm_states and episode_start for proper extraction
+            # episode_start should be passed as array (or None for non-recurrent)
             output = self.output_extractor.extract(
                 self.model, obs_single, action_scalar, 
-                lstm_states=lstm_states, 
-                episode_start=episode_start
+                lstm_states=lstm_states if self.is_recurrent else None, 
+                episode_start=episode_start if self.is_recurrent else None
             )
             self.renderer.set_model_output(output, style)
             
+            # After first step, episode_start is False (unless episode resets)
             episode_start = np.array([False])
             
             # Step (VecEnv API: returns arrays, uses 'dones' not terminated/truncated)
             obs, rewards, dones, infos = self.env.step(action)
             
+            # Handle episode reset for recurrent models
             if dones[0]:
                 obs = self.env.reset()
                 if isinstance(obs, tuple):
                     obs = obs[0]
-                lstm_states = None
-                episode_start = np.array([True])
+                # Reset LSTM states on episode boundary
+                # Setting to None will trigger re-initialization on next predict()
+                if self.is_recurrent:
+                    lstm_states = None
+                    episode_start = np.array([True])
             
             # Render - get underlying env from VecEnv wrapper
             if hasattr(self.env, 'envs'):
