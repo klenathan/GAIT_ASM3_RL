@@ -120,11 +120,12 @@ class StageBasedStrategy(AdvancementStrategy):
         avg_enemy_kills = np.mean(metrics.enemy_kills[-window:])
         avg_damage_dealt = np.mean(metrics.damage_dealt[-window:])
         avg_damage_taken = np.mean(metrics.damage_taken[-window:])
-        
+
         # Average win time (only from wins in window)
-        recent_win_times = [t for t, w in zip(metrics.episode_lengths[-window:], 
-                                               metrics.wins[-window:]) if w == 1]
-        avg_win_time = np.mean(recent_win_times) if recent_win_times else 999999
+        recent_win_times = [t for t, w in zip(metrics.episode_lengths[-window:],
+                                              metrics.wins[-window:]) if w == 1]
+        avg_win_time = np.mean(
+            recent_win_times) if recent_win_times else 999999
 
         # All criteria must be met
         criteria_met = (
@@ -165,11 +166,14 @@ class CurriculumStage:
     min_spawner_kill_rate: float = 0.3    # Required avg spawner kills per episode
     min_win_rate: float = 0.0             # Required win rate to advance
     min_survival_steps: int = 500         # Required avg episode length
-    max_survival_steps: int = 999999      # Maximum avg episode length (penalizes passivity)
+    # Maximum avg episode length (penalizes passivity)
+    max_survival_steps: int = 999999
     min_enemy_kill_rate: float = 0.0     # Required avg enemy kills per episode
     min_damage_dealt: float = 0.0        # Required avg damage dealt per episode
-    max_damage_taken: float = 999999.0   # Maximum avg damage taken (lower = better defense)
-    max_win_time: int = 999999           # Maximum avg steps to win (lower = faster wins)
+    # Maximum avg damage taken (lower = better defense)
+    max_damage_taken: float = 999999.0
+    # Maximum avg steps to win (lower = faster wins)
+    max_win_time: int = 999999
     min_episodes: int = 50               # Minimum episodes before advancement check
 
     def __repr__(self):
@@ -187,10 +191,11 @@ class CurriculumMetrics:
     enemy_kills: List[int] = field(default_factory=list)
     damage_dealt: List[float] = field(default_factory=list)
     damage_taken: List[float] = field(default_factory=list)
-    win_times: List[int] = field(default_factory=list)  # Steps to win (only for wins)
+    # Steps to win (only for wins)
+    win_times: List[int] = field(default_factory=list)
 
     def record_episode(self, spawners_killed: int, won: bool, length: int, reward: float,
-                      enemy_kills: int = 0, damage_dealt: float = 0, damage_taken: float = 0):
+                       enemy_kills: int = 0, damage_dealt: float = 0, damage_taken: float = 0):
         self.spawner_kills.append(float(spawners_killed))
         self.wins.append(1 if won else 0)
         self.episode_lengths.append(length)
@@ -198,17 +203,17 @@ class CurriculumMetrics:
         self.enemy_kills.append(enemy_kills)
         self.damage_dealt.append(damage_dealt)
         self.damage_taken.append(damage_taken)
-        
+
         # Track time to win for successful episodes
         if won:
             self.win_times.append(length)
 
         # Keep only last 200 episodes to limit memory
         for lst in [self.spawner_kills, self.wins, self.episode_lengths, self.episode_rewards,
-                   self.enemy_kills, self.damage_dealt, self.damage_taken]:
+                    self.enemy_kills, self.damage_dealt, self.damage_taken]:
             if len(lst) > 200:
                 lst.pop(0)
-        
+
         # Keep last 100 win times (less frequent)
         if len(self.win_times) > 100:
             self.win_times.pop(0)
@@ -264,6 +269,8 @@ def get_default_stages() -> List[CurriculumStage]:
             min_spawner_kill_rate=0.3,    # Spawners still not focus
             min_win_rate=0.0,             # Wins not required
             min_survival_steps=600,       # Longer survival with combat
+            min_enemy_kill_rate=3.0,      # MUST kill at least 3 enemies per episode on average
+            min_damage_dealt=50.0,        # Must deal damage to enemies
             min_episodes=75,
         ),
 
@@ -297,12 +304,16 @@ def get_default_stages() -> List[CurriculumStage]:
             shaping_scale_mult=1.8,       # Less guidance - more independent
             damage_penalty_mult=1.2,      # Significant penalty
             # Advancement: Must handle multiple targets and kill spawners
-            min_spawner_kill_rate=1.2,    # Multiple spawner kills (reduced from 1.5)
-            min_win_rate=0.10,            # Some wins required (reduced from 0.15)
+            # Multiple spawner kills (reduced from 1.5)
+            min_spawner_kill_rate=1.2,
+            # Some wins required (reduced from 0.15)
+            min_win_rate=0.10,
             min_survival_steps=750,       # Good survival (reduced from 800)
             max_survival_steps=1500,      # Don't be too passive (more lenient)
-            min_enemy_kill_rate=5.0,      # Must actively fight enemies (reduced from 8.0)
-            min_damage_dealt=100.0,       # Must deal damage (reduced from 150.0)
+            # Must actively fight enemies (reduced from 8.0)
+            min_enemy_kill_rate=5.0,
+            # Must deal damage (reduced from 150.0)
+            min_damage_dealt=100.0,
             min_episodes=150,
         ),
 
@@ -405,7 +416,7 @@ class CurriculumManager:
         return self.current_stage_index >= self.max_stage
 
     def record_episode(self, spawners_killed: int, won: bool, length: int, reward: float,
-                      enemy_kills: int = 0, damage_dealt: float = 0, damage_taken: float = 0):
+                       enemy_kills: int = 0, damage_dealt: float = 0, damage_taken: float = 0):
         """Record episode outcome for advancement evaluation."""
         self.metrics.record_episode(spawners_killed, won, length, reward,
                                     enemy_kills, damage_dealt, damage_taken)

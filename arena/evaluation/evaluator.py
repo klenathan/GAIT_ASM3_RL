@@ -7,6 +7,7 @@ from arena.training.registry import AlgorithmRegistry
 from arena.ui.model_output import ModelOutputExtractor
 from arena.ui.menu import Menu
 from arena.ui.renderer import ArenaRenderer
+from arena.game.human_controller import HumanController
 from arena.core.environment_dict import ArenaDictEnv
 from arena.core.environment import ArenaEnv
 from arena.core import config
@@ -97,7 +98,7 @@ class Evaluator:
         # Extract run prefix based on model name format
         # Format: {algo}_style{N}_{YYYYMMDD}_{HHMMSS}[_NUMBERS_steps or _final]
         run_prefix = None
-        
+
         # Try to extract step count to get prefix before it
         step_match = re.search(r'_(\d+)_steps', model_name)
         if step_match:
@@ -110,24 +111,26 @@ class Evaluator:
             pattern_match = re.match(r'(.+_style\d+_\d{8}_\d{6})', model_name)
             if pattern_match:
                 run_prefix = pattern_match.group(1)
-        
+
         if run_prefix:
             # Special handling for final models
             if model_name.endswith('_final'):
                 # Look for the exact final vecnormalize file first
-                final_pattern = os.path.join(model_dir, f"{run_prefix}_vecnormalize_final.pkl")
+                final_pattern = os.path.join(
+                    model_dir, f"{run_prefix}_vecnormalize_final.pkl")
                 if os.path.exists(final_pattern):
                     return final_pattern
-                
+
                 # If final vecnormalize doesn't exist, look in checkpoints directory for latest
                 parent_dir = os.path.dirname(model_dir)
                 checkpoints_dir = os.path.join(parent_dir, 'checkpoints')
                 if os.path.exists(checkpoints_dir):
-                    pattern = os.path.join(checkpoints_dir, f"{run_prefix}_vecnormalize*.pkl")
+                    pattern = os.path.join(
+                        checkpoints_dir, f"{run_prefix}_vecnormalize*.pkl")
                     matches = sorted(glob.glob(pattern), reverse=True)
                     if matches:
                         return matches[0]
-            
+
             pattern = os.path.join(
                 model_dir, f"{run_prefix}_vecnormalize*.pkl")
             matches = sorted(glob.glob(pattern), reverse=True)  # Latest first
@@ -189,7 +192,7 @@ class Evaluator:
         obs = self.env.reset()
         if isinstance(obs, tuple):
             obs = obs[0]  # Handle new gym API
-        
+
         # Initialize LSTM states for recurrent models
         # RecurrentPPO expects lstm_states=None initially, which triggers initialization
         lstm_states = None
@@ -216,7 +219,7 @@ class Evaluator:
 
             # Save LSTM states before predict (for proper extraction)
             lstm_states_for_extraction = lstm_states if self.is_recurrent else None
-            
+
             # Predict action (obs is already an array from VecEnv)
             if self.is_recurrent:
                 # RecurrentPPO: pass lstm_states and episode_start flag
@@ -226,8 +229,9 @@ class Evaluator:
                 )
             else:
                 # Non-recurrent: standard prediction
-                action, _ = self.model.predict(obs, deterministic=deterministic)
-            
+                action, _ = self.model.predict(
+                    obs, deterministic=deterministic)
+
             # Get scalar action for visualization (VecEnv returns arrays)
             action_scalar = action[0] if isinstance(
                 action, np.ndarray) else action
@@ -245,18 +249,18 @@ class Evaluator:
             # For recurrent models, use lstm_states BEFORE predict for proper extraction
             # This ensures we extract with the same states that were used during predict
             output = self.output_extractor.extract(
-                self.model, obs_single, action_scalar, 
-                lstm_states=lstm_states_for_extraction if self.is_recurrent else None, 
+                self.model, obs_single, action_scalar,
+                lstm_states=lstm_states_for_extraction if self.is_recurrent else None,
                 episode_start=episode_start if self.is_recurrent else None
             )
             self.renderer.set_model_output(output, style)
-            
+
             # After first step, episode_start is False (unless episode resets)
             episode_start = np.array([False])
 
             # Step (VecEnv API: returns arrays, uses 'dones' not terminated/truncated)
             obs, rewards, dones, infos = self.env.step(action)
-            
+
             # Handle episode reset for recurrent models
             if dones[0]:
                 obs = self.env.reset()
@@ -267,12 +271,72 @@ class Evaluator:
                 if self.is_recurrent:
                     lstm_states = None
                     episode_start = np.array([True])
-            
+
             # Render - get underlying env from VecEnv wrapper
             if hasattr(self.env, 'envs'):
                 self.env.envs[0].render()
             elif hasattr(self.env, 'venv') and hasattr(self.env.venv, 'envs'):
                 self.env.venv.envs[0].render()
+
+        return "menu"
+
+    def run_human_session(self, style: int):
+        """Run a manual gameplay session."""
+        if self.env:
+            self.env.close()
+
+        # Create base environment
+        self.env = ArenaEnv(control_style=style, render_mode="human")
+        self.env.renderer = self.renderer
+        self.env._owns_renderer = False
+
+        controller = HumanController(style=style)
+
+        # Create a mock metrics object for the renderer
+        metrics = {
+            'episode': 1,
+            'episode_reward': 0.0,
+            'total_reward': 0.0,
+            'is_human': True
+        }
+
+        obs, _ = self.env.reset()
+        running = True
+
+        while running:
+            events = pygame.event.get()
+            for event in events:
+                if event.type == pygame.QUIT:
+                    return "quit"
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        return "menu"
+                    # UI Toggles
+                    if event.key == pygame.K_h:
+                        self.renderer.show_health = not self.renderer.show_health
+                    if event.key == pygame.K_v:
+                        self.renderer.show_vision = not self.renderer.show_vision
+                    if event.key == pygame.K_d:
+                        self.renderer.show_debug = not self.renderer.show_debug
+
+            # Get action from human controller
+            action = controller.get_action(events)
+
+            # Step environment
+            obs, reward, terminated, truncated, info = self.env.step(action)
+            metrics['episode_reward'] += reward
+            metrics['total_reward'] += reward
+
+            # Update renderer info (no model output)
+            self.renderer.set_model_output(None, style)
+
+            if terminated or truncated:
+                obs, _ = self.env.reset()
+                metrics['episode'] += 1
+                metrics['episode_reward'] = 0.0
+
+            # Render
+            self.renderer.render(self.env, training_metrics=metrics)
 
         return "menu"
 
@@ -295,12 +359,20 @@ class Evaluator:
                     if action == "start":
                         selection = self.menu.get_selection()
                         if selection:
-                            state = self.run_session(
-                                selection["model"], selection["style"], selection["deterministic"]
-                            )
+                            if selection["mode"] == "Human Player":
+                                state = self.run_human_session(
+                                    selection["style"])
+                            else:
+                                state = self.run_session(
+                                    selection["model"], selection["style"], selection["deterministic"]
+                                )
                         else:
-                            self.menu.set_status(
-                                "No model selected", "warning")
+                            if self.menu.gameplay_modes[self.menu.selected_mode_idx] == "Model":
+                                self.menu.set_status(
+                                    "No models available for selection", "warning")
+                            else:
+                                self.menu.set_status(
+                                    "No selection made", "warning")
 
                     if action == "quit":
                         break

@@ -11,12 +11,18 @@ import numpy as np
 # GAME SETTINGS
 # ============================================================================
 
-SCREEN_WIDTH = 1200
-SCREEN_HEIGHT = 800
-FPS = 60
+GAME_WIDTH = 1600
+GAME_HEIGHT = 1280
 
-GAME_WIDTH = 1000
-GAME_HEIGHT = 800
+# Visual Scaling for smaller screens
+RENDER_SCALE = 0.6  # Scale down visuals only (logic stays 1600x1280)
+WINDOW_GAME_WIDTH = int(GAME_WIDTH * RENDER_SCALE)
+WINDOW_GAME_HEIGHT = int(GAME_HEIGHT * RENDER_SCALE)
+SIDEBAR_WIDTH = 300
+
+SCREEN_WIDTH = WINDOW_GAME_WIDTH + SIDEBAR_WIDTH
+SCREEN_HEIGHT = WINDOW_GAME_HEIGHT
+FPS = 60
 
 # Action and Observation Spaces
 ACTION_SPACE_STYLE_1 = 5  # Rotation, Thrust, Shoot
@@ -42,6 +48,7 @@ OBS_DIM = 32
 
 # Threat detection
 PROJECTILE_DANGER_RADIUS = 150  # Radius to count nearby projectiles
+MIN_ENEMY_SPAWN_DISTANCE = 150  # Minimum distance between spawning enemies
 
 
 # Colors
@@ -78,7 +85,7 @@ PLAYER_FRICTION = 0.97
 PLAYER_SHOOT_COOLDOWN = 10
 
 ENEMY_RADIUS = 12
-ENEMY_HEALTH = 30
+ENEMY_HEALTH = 10
 ENEMY_SPEED = 2.0
 ENEMY_DAMAGE = 10
 ENEMY_SHOOT_COOLDOWN = 60
@@ -97,10 +104,10 @@ PROJECTILE_LIFETIME = 120
 # Phase System
 PHASE_CONFIG = [
     {"spawners": 1, "enemy_speed_mult": 1.0, "spawn_rate_mult": 1.0},
-    {"spawners": 2, "enemy_speed_mult": 1.1, "spawn_rate_mult": 0.9},
-    {"spawners": 3, "enemy_speed_mult": 1.2, "spawn_rate_mult": 0.85},
-    {"spawners": 4, "enemy_speed_mult": 1.3, "spawn_rate_mult": 0.8},
-    {"spawners": 5, "enemy_speed_mult": 1.4, "spawn_rate_mult": 0.75},
+    {"spawners": 2, "enemy_speed_mult": 0.9, "spawn_rate_mult": 0.9},
+    {"spawners": 3, "enemy_speed_mult": 0.8, "spawn_rate_mult": 0.85},
+    {"spawners": 4, "enemy_speed_mult": 0.7, "spawn_rate_mult": 0.8},
+    {"spawners": 5, "enemy_speed_mult": 0.75, "spawn_rate_mult": 0.75},
 ]
 MAX_PHASES = len(PHASE_CONFIG)
 
@@ -110,7 +117,7 @@ STEP_REWARD = 0.1
 REWARD_ENEMY_DESTROYED = 5.0
 REWARD_SPAWNER_DESTROYED = 150.0
 REWARD_PHASE_COMPLETE = 100.0
-REWARD_DAMAGE_TAKEN = -2.0  
+REWARD_DAMAGE_TAKEN = -2.0
 REWARD_DEATH = -150.0
 REWARD_STEP_SURVIVAL = 0.01
 REWARD_HIT_ENEMY = 2.0
@@ -122,7 +129,7 @@ REWARD_QUICK_SPAWNER_KILL = 50.0
 PENALTY_INACTIVITY = -0.05          # Per-step penalty when not moving enough
 PENALTY_CORNER = -0.1               # Per-step penalty when too close to edges
 CORNER_MARGIN = 80                  # Distance from edge to be considered "in corner"
-INACTIVITY_VELOCITY_THRESHOLD = 0.5 # Minimum velocity magnitude to be "active"
+INACTIVITY_VELOCITY_THRESHOLD = 0.5  # Minimum velocity magnitude to be "active"
 
 # Reward Shaping
 SHAPING_MODE = "delta"  # Simpler selection
@@ -152,6 +159,7 @@ MODEL_SAVE_DIR = "./models"      # Deprecated: kept for reference only
 # STRUCTURED CONFIGURATIONS
 # ============================================================================
 
+
 @dataclass
 class TrainerConfig:
     """Configuration for the training run."""
@@ -174,28 +182,33 @@ class TrainerConfig:
     load_vecnormalize: bool = True   # Load VecNormalize stats if available
     load_curriculum: bool = True      # Restore curriculum progress
     load_replay_buffer: bool = True   # Load replay buffer (DQN only)
-    
+
     # Learning rate schedule
     lr_schedule: str = "constant"  # "constant", "linear", "exponential", "cosine"
     lr_end: Optional[float] = None  # Final LR; defaults to start_lr * 0.1
-    lr_warmup_fraction: float = 0.0  # Fraction of training for warmup (0 = none)
-    
+    # Fraction of training for warmup (0 = none)
+    lr_warmup_fraction: float = 0.0
+
     # DQN specific
-    dqn_hidden_layers: List[int] = field(default_factory=lambda: [256, 128, 64])
+    dqn_hidden_layers: List[int] = field(
+        default_factory=lambda: [256, 128, 64])
     dqn_activation: str = "SiLU"
-    
+
     # PPO specific
-    ppo_net_arch: Dict[str, List[int]] = field(default_factory=lambda: dict(pi=[128, 64], vf=[128, 64]))
+    ppo_net_arch: Dict[str, List[int]] = field(
+        default_factory=lambda: dict(pi=[256, 128, 64], vf=[256, 128, 64]))
     ppo_activation: str = "SiLU"
-    
+
     # LSTM specific
     ppo_lstm_net_arch: List[int] = field(default_factory=lambda: [128, 64])
     ppo_lstm_hidden_size: int = 128
     ppo_lstm_n_layers: int = 1
-    
+
     # A2C specific
-    a2c_net_arch: Dict[str, List[int]] = field(default_factory=lambda: dict(pi=[384, 256, 256, 128, 64], vf=[256, 128, 128, 64]))
+    a2c_net_arch: Dict[str, List[int]] = field(default_factory=lambda: dict(
+        pi=[384, 256, 256, 128, 64], vf=[256, 128, 128, 64]))
     a2c_activation: str = "SiLU"
+
 
 @dataclass
 class DQNHyperparams:
@@ -212,6 +225,7 @@ class DQNHyperparams:
     learning_starts: int = 1000
     verbose: int = 1
 
+
 @dataclass
 class PPOHyperparams:
     learning_rate: float = 1e-4
@@ -227,10 +241,11 @@ class PPOHyperparams:
     target_kl: float = 0.03
     verbose: int = 0
 
+
 @dataclass
 class A2CHyperparams:
     learning_rate: float = 2.5e-4
-    n_steps: int = 128  
+    n_steps: int = 128
     gamma: float = 0.99
     gae_lambda: float = 1.0
     ent_coef: float = 0.05  # Higher entropy for better exploration
@@ -241,20 +256,22 @@ class A2CHyperparams:
     normalize_advantage: bool = True  # Stabilizes training
     verbose: int = 1
 
+
 @dataclass
 class PPOLSTMHyperparams(PPOHyperparams):
-    learning_rate: float = 1e-4 
-    n_steps: int = 512 
-    batch_size: int = 32 
-    n_epochs: int = 5 
+    learning_rate: float = 1e-4
+    n_steps: int = 512
+    batch_size: int = 32
+    n_epochs: int = 5
     gamma: float = 0.99
-    gae_lambda: float = 0.98 
+    gae_lambda: float = 0.98
     clip_range: float = 0.2
-    ent_coef: float = 0.05 
+    ent_coef: float = 0.05
     vf_coef: float = 1.0
-    max_grad_norm: float = 0.5 
+    max_grad_norm: float = 0.5
     target_kl: float = 0.03
     verbose: int = 0
+
 
 # Default hyperparameter instances (equivalent to old config)
 DQN_DEFAULT = DQNHyperparams()

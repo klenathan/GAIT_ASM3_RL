@@ -188,7 +188,7 @@ class ArenaDictEnv(gym.Env):
             if spawner.alive:
                 spawner.update()
                 if spawner.can_spawn(len([e for e in self.enemies if e.alive]), max_enemies):
-                    new_enemy = spawner.spawn_enemy(self.np_random, enemy_speed)
+                    new_enemy = spawner.spawn_enemy(self.np_random, enemy_speed, existing_enemies=self.enemies)
                     if new_enemy: self.enemies.append(new_enemy)
         
         # Update projectiles
@@ -258,13 +258,12 @@ class ArenaDictEnv(gym.Env):
         num = phase_cfg['spawners']
         self.enemies = []
         
-        base_angle = self.np_random.uniform(0, 2 * math.pi)
-        
         for i in range(num):
-            angle = (2 * math.pi / num) * i + base_angle + self.np_random.uniform(-0.2, 0.2)
-            dist = min(config.GAME_WIDTH, config.GAME_HEIGHT) * 0.4 * self.np_random.uniform(0.8, 1.2)
-            x = config.GAME_WIDTH / 2 + math.cos(angle) * dist
-            y = config.GAME_HEIGHT / 2 + math.sin(angle) * dist
+            x, y = self._get_spawner_position_smart(i, num)
+            
+            # Add small random jitter
+            x += self.np_random.uniform(-30, 30)
+            y += self.np_random.uniform(-30, 30)
             x = utils.clamp(x, config.SPAWNER_RADIUS, config.GAME_WIDTH - config.SPAWNER_RADIUS)
             y = utils.clamp(y, config.SPAWNER_RADIUS, config.GAME_HEIGHT - config.SPAWNER_RADIUS)
             
@@ -284,6 +283,40 @@ class ArenaDictEnv(gym.Env):
         self._prev_spawner_total_health = None
         self._prev_enemy_count = None
         self._prev_player_health = None
+
+    def _get_spawner_position_smart(self, spawner_index, total_spawners):
+        """
+        Distribute spawners intelligently based on count:
+        - 1 spawner: Center-top
+        - 2 spawners: Left and right edges
+        - 3 spawners: Triangle formation (top, bottom-left, bottom-right)
+        - 4 spawners: Four corners
+        - 5 spawners: Four corners + center
+        """
+        margin = 200
+        w, h = config.GAME_WIDTH, config.GAME_HEIGHT
+        
+        positions = []
+        if total_spawners == 1:
+            positions = [(w / 2, margin)]
+        elif total_spawners == 2:
+            positions = [(margin, h / 2), (w - margin, h / 2)]
+        elif total_spawners == 3:
+            positions = [(w / 2, margin), (margin, h - margin), (w - margin, h - margin)]
+        elif total_spawners == 4:
+            positions = [(margin, margin), (w - margin, margin), 
+                         (margin, h - margin), (w - margin, h - margin)]
+        elif total_spawners == 5:
+            positions = [(margin, margin), (w - margin, margin), 
+                         (margin, h - margin), (w - margin, h - margin),
+                         (w / 2, h / 2)]
+        else:
+            # Fallback: circular pattern
+            angle = (2 * math.pi / total_spawners) * spawner_index
+            dist = min(w, h) * 0.4
+            return w / 2 + math.cos(angle) * dist, h / 2 + math.sin(angle) * dist
+
+        return positions[spawner_index]
     
     def _get_observation(self):
         """
