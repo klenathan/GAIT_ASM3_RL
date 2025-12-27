@@ -117,12 +117,25 @@ class StageBasedStrategy(AdvancementStrategy):
         spawner_kill_rate = np.mean(metrics.spawner_kills[-window:])
         win_rate = np.mean(metrics.wins[-window:])
         avg_survival = np.mean(metrics.episode_lengths[-window:])
+        avg_enemy_kills = np.mean(metrics.enemy_kills[-window:])
+        avg_damage_dealt = np.mean(metrics.damage_dealt[-window:])
+        avg_damage_taken = np.mean(metrics.damage_taken[-window:])
+        
+        # Average win time (only from wins in window)
+        recent_win_times = [t for t, w in zip(metrics.episode_lengths[-window:], 
+                                               metrics.wins[-window:]) if w == 1]
+        avg_win_time = np.mean(recent_win_times) if recent_win_times else 999999
 
         # All criteria must be met
         criteria_met = (
             spawner_kill_rate >= stage.min_spawner_kill_rate and
             win_rate >= stage.min_win_rate and
-            avg_survival >= stage.min_survival_steps
+            avg_survival >= stage.min_survival_steps and
+            avg_survival <= stage.max_survival_steps and  # Not too passive
+            avg_enemy_kills >= stage.min_enemy_kill_rate and
+            avg_damage_dealt >= stage.min_damage_dealt and
+            avg_damage_taken <= stage.max_damage_taken and
+            avg_win_time <= stage.max_win_time  # Fast wins required
         )
 
         return criteria_met
@@ -130,7 +143,7 @@ class StageBasedStrategy(AdvancementStrategy):
     def get_name(self) -> str:
         stage = self.curriculum_manager.current_stage
         return (f"StageBased(spawners>={stage.min_spawner_kill_rate}, "
-                f"winrate>={stage.min_win_rate}, survival>={stage.min_survival_steps})")
+                f"wins>={stage.min_win_rate}, enemies>={stage.min_enemy_kill_rate})")
 
 
 # =============================================================================
@@ -152,7 +165,12 @@ class CurriculumStage:
     min_spawner_kill_rate: float = 0.3    # Required avg spawner kills per episode
     min_win_rate: float = 0.0             # Required win rate to advance
     min_survival_steps: int = 500         # Required avg episode length
-    min_episodes: int = 50                # Minimum episodes before advancement check
+    max_survival_steps: int = 999999      # Maximum avg episode length (penalizes passivity)
+    min_enemy_kill_rate: float = 0.0     # Required avg enemy kills per episode
+    min_damage_dealt: float = 0.0        # Required avg damage dealt per episode
+    max_damage_taken: float = 999999.0   # Maximum avg damage taken (lower = better defense)
+    max_win_time: int = 999999           # Maximum avg steps to win (lower = faster wins)
+    min_episodes: int = 50               # Minimum episodes before advancement check
 
     def __repr__(self):
         return f"Stage({self.name})"
@@ -165,17 +183,35 @@ class CurriculumMetrics:
     wins: List[int] = field(default_factory=list)
     episode_lengths: List[int] = field(default_factory=list)
     episode_rewards: List[float] = field(default_factory=list)
+    # New combat engagement metrics
+    enemy_kills: List[int] = field(default_factory=list)
+    damage_dealt: List[float] = field(default_factory=list)
+    damage_taken: List[float] = field(default_factory=list)
+    win_times: List[int] = field(default_factory=list)  # Steps to win (only for wins)
 
-    def record_episode(self, spawners_killed: int, won: bool, length: int, reward: float):
+    def record_episode(self, spawners_killed: int, won: bool, length: int, reward: float,
+                      enemy_kills: int = 0, damage_dealt: float = 0, damage_taken: float = 0):
         self.spawner_kills.append(float(spawners_killed))
         self.wins.append(1 if won else 0)
         self.episode_lengths.append(length)
         self.episode_rewards.append(reward)
+        self.enemy_kills.append(enemy_kills)
+        self.damage_dealt.append(damage_dealt)
+        self.damage_taken.append(damage_taken)
+        
+        # Track time to win for successful episodes
+        if won:
+            self.win_times.append(length)
 
         # Keep only last 200 episodes to limit memory
-        for lst in [self.spawner_kills, self.wins, self.episode_lengths, self.episode_rewards]:
+        for lst in [self.spawner_kills, self.wins, self.episode_lengths, self.episode_rewards,
+                   self.enemy_kills, self.damage_dealt, self.damage_taken]:
             if len(lst) > 200:
                 lst.pop(0)
+        
+        # Keep last 100 win times (less frequent)
+        if len(self.win_times) > 100:
+            self.win_times.pop(0)
 
 
 @dataclass
@@ -261,45 +297,58 @@ def get_default_stages() -> List[CurriculumStage]:
             shaping_scale_mult=1.8,       # Less guidance - more independent
             damage_penalty_mult=1.2,      # Significant penalty
             # Advancement: Must handle multiple targets and kill spawners
-            min_spawner_kill_rate=1.5,    # Multiple spawner kills
-            min_win_rate=0.1,             # Some wins required
-            min_survival_steps=1000,      # Long survival with many threats
+            min_spawner_kill_rate=1.2,    # Multiple spawner kills (reduced from 1.5)
+            min_win_rate=0.10,            # Some wins required (reduced from 0.15)
+            min_survival_steps=750,       # Good survival (reduced from 800)
+            max_survival_steps=1500,      # Don't be too passive (more lenient)
+            min_enemy_kill_rate=5.0,      # Must actively fight enemies (reduced from 8.0)
+            min_damage_dealt=100.0,       # Must deal damage (reduced from 150.0)
             min_episodes=150,
         ),
 
-        # Grade 5: Tactical Combat
-        # Behavior Focus: Advanced tactics, health management, efficiency
-        # High difficulty, need to be efficient and tactical
+        # Grade 5: Aggressive Combat
+        # Behavior Focus: Balanced aggression - fast clears while staying alive
+        # Emphasis on combat efficiency and win speed
         CurriculumStage(
-            name="Grade 5: Tactical Combat",
-            spawn_cooldown_mult=1.2,      # Fast spawns
-            max_enemies_mult=0.9,         # Many enemies
-            spawner_health_mult=0.95,     # Hard spawners
+            name="Grade 5: Aggressive Combat",
+            spawn_cooldown_mult=1.15,     # Fast spawns
+            max_enemies_mult=0.85,        # Many enemies
+            spawner_health_mult=0.9,      # Strong spawners
             enemy_speed_mult=1.0,         # Full speed
-            shaping_scale_mult=1.2,       # Minimal guidance - tactical thinking
-            damage_penalty_mult=1.5,      # High penalty - avoid damage
-            # Advancement: Must win consistently with good tactics
-            min_spawner_kill_rate=2.0,    # Many spawner kills
-            min_win_rate=0.25,            # Good win rate
-            min_survival_steps=1200,      # Long survival
+            shaping_scale_mult=1.0,       # Minimal guidance - independent combat
+            damage_penalty_mult=1.3,      # Moderate penalty - smart aggression
+            # Advancement: Must be aggressive AND efficient
+            min_spawner_kill_rate=2.2,    # High spawner kill rate
+            min_win_rate=0.35,            # Decent win rate
+            min_survival_steps=700,       # Moderate survival (don't hide)
+            max_survival_steps=1200,      # Win quickly, don't drag out
+            min_enemy_kill_rate=12.0,     # High enemy elimination
+            min_damage_dealt=250.0,       # High damage output
+            max_damage_taken=150.0,       # Good defense despite aggression
+            max_win_time=1000,            # Fast wins (when winning)
             min_episodes=200,
         ),
 
-        # Grade 6: Mastery
-        # Behavior Focus: Optimization, high performance, quick completion
-        # Full difficulty, minimal guidance, high performance required
+        # Grade 6: Elite Performance
+        # Behavior Focus: Speed, precision, efficiency - win fast and clean
+        # Full difficulty, requires aggressive play with excellent execution
         CurriculumStage(
-            name="Grade 6: Mastery",
+            name="Grade 6: Elite Performance",
             spawn_cooldown_mult=1.0,      # Full spawn rate
             max_enemies_mult=1.0,         # Maximum enemies
             spawner_health_mult=1.0,      # Full spawner health
             enemy_speed_mult=1.0,         # Full enemy speed
-            shaping_scale_mult=0.8,       # Minimal shaping - pure performance
-            damage_penalty_mult=1.8,      # Maximum penalty - perfection required
-            # Final stage - very high requirements
-            min_spawner_kill_rate=3.0,    # Excellent spawner kill rate
-            min_win_rate=0.5,             # High win rate
-            min_survival_steps=1500,      # Excellent survival
+            shaping_scale_mult=0.5,       # Minimal shaping - pure skill
+            damage_penalty_mult=1.0,      # Standard penalty
+            # Final stage - elite combat performance required
+            min_spawner_kill_rate=3.0,    # Excellent spawner destruction
+            min_win_rate=0.6,             # High win rate
+            min_survival_steps=600,       # Don't need long survival - win fast!
+            max_survival_steps=950,       # Must win quickly, no passive play
+            min_enemy_kill_rate=15.0,     # Very high kill rate
+            min_damage_dealt=350.0,       # Excellent damage output
+            max_damage_taken=120.0,       # Excellent defense
+            max_win_time=850,             # Fast, efficient wins required
             min_episodes=250,
         ),
     ]
@@ -355,9 +404,11 @@ class CurriculumManager:
     def is_final_stage(self) -> bool:
         return self.current_stage_index >= self.max_stage
 
-    def record_episode(self, spawners_killed: int, won: bool, length: int, reward: float):
+    def record_episode(self, spawners_killed: int, won: bool, length: int, reward: float,
+                      enemy_kills: int = 0, damage_dealt: float = 0, damage_taken: float = 0):
         """Record episode outcome for advancement evaluation."""
-        self.metrics.record_episode(spawners_killed, won, length, reward)
+        self.metrics.record_episode(spawners_killed, won, length, reward,
+                                    enemy_kills, damage_dealt, damage_taken)
 
     def check_advancement(self) -> bool:
         """Check if agent should advance to next stage. Returns True if advanced."""
@@ -405,6 +456,10 @@ class CurriculumManager:
                 "wins": list(self.metrics.wins[-200:]),
                 "episode_lengths": list(self.metrics.episode_lengths[-200:]),
                 "episode_rewards": list(self.metrics.episode_rewards[-200:]),
+                "enemy_kills": list(self.metrics.enemy_kills[-200:]),
+                "damage_dealt": list(self.metrics.damage_dealt[-200:]),
+                "damage_taken": list(self.metrics.damage_taken[-200:]),
+                "win_times": list(self.metrics.win_times[-100:]),
             }
         }
 
@@ -422,3 +477,7 @@ class CurriculumManager:
             self.metrics.wins = list(m.get("wins", []))
             self.metrics.episode_lengths = list(m.get("episode_lengths", []))
             self.metrics.episode_rewards = list(m.get("episode_rewards", []))
+            self.metrics.enemy_kills = list(m.get("enemy_kills", []))
+            self.metrics.damage_dealt = list(m.get("damage_dealt", []))
+            self.metrics.damage_taken = list(m.get("damage_taken", []))
+            self.metrics.win_times = list(m.get("win_times", []))

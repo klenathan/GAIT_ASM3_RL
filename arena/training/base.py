@@ -156,15 +156,45 @@ class BaseTrainer(ABC):
     def _find_vecnormalize_stats(self, model_path: str) -> Optional[str]:
         """Find VecNormalize stats file matching the model."""
         import glob
+        import re
         
         model_dir = os.path.dirname(model_path)
         model_name = os.path.basename(model_path).replace('.zip', '')
         
-        # Extract run prefix (e.g., ppo_style2_20251222_154509)
-        parts = model_name.split('_')
-        if len(parts) >= 4:
-            # Try to find matching vecnormalize file in same directory (new structure)
-            run_prefix = '_'.join(parts[:4])  # algo_styleX_YYYYMMDD_HHMMSS
+        # Extract run prefix based on model name format
+        # Format: {algo}_style{N}_{YYYYMMDD}_{HHMMSS}[_NUMBERS_steps or _final]
+        run_prefix = None
+        
+        # Try to extract step count to get prefix before it
+        step_match = re.search(r'_(\d+)_steps', model_name)
+        if step_match:
+            run_prefix = model_name[:step_match.start()]
+        elif model_name.endswith('_final'):
+            # Remove the _final suffix to get the prefix
+            run_prefix = model_name[:-6]  # Remove '_final'
+        else:
+            # Fallback: try to match the pattern {algo}_style{N}_{date}_{time}
+            pattern_match = re.match(r'(.+_style\d+_\d{8}_\d{6})', model_name)
+            if pattern_match:
+                run_prefix = pattern_match.group(1)
+        
+        if run_prefix:
+            # Special handling for final models
+            if model_name.endswith('_final'):
+                # Look for the exact final vecnormalize file first
+                final_pattern = os.path.join(model_dir, f"{run_prefix}_vecnormalize_final.pkl")
+                if os.path.exists(final_pattern):
+                    return final_pattern
+                
+                # If final vecnormalize doesn't exist, look in checkpoints directory for latest
+                parent_dir = os.path.dirname(model_dir)
+                checkpoints_dir = os.path.join(parent_dir, 'checkpoints')
+                if os.path.exists(checkpoints_dir):
+                    pattern = os.path.join(checkpoints_dir, f"{run_prefix}_vecnormalize*.pkl")
+                    matches = sorted(glob.glob(pattern), reverse=True)
+                    if matches:
+                        return matches[0]
+            
             pattern = os.path.join(model_dir, f"{run_prefix}_vecnormalize*.pkl")
             matches = sorted(glob.glob(pattern), reverse=True)  # Latest first
             if matches:
@@ -319,6 +349,13 @@ class BaseTrainer(ABC):
         save_path = os.path.join(self.final_dir, f"{self.run_name}_final")
         self.model.save(save_path)
         print(f"Final model saved to: {save_path}.zip")
+        
+        # Save VecNormalize stats if available
+        if isinstance(self.env, VecNormalize):
+            vecnorm_path = save_path.replace(".zip", "").replace(f"{self.run_name}_final", f"{self.run_name}_vecnormalize_final.pkl")
+            self.env.save(vecnorm_path)
+            print(f"VecNormalize stats saved to: {vecnorm_path}")
+        
         print(f"All run files located in: {self.run_dir}")
         
         # Save training state for transfer learning

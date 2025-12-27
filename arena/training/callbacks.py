@@ -197,18 +197,22 @@ class CurriculumCallback(BaseCallback):
         super().__init__(verbose)
         self.curriculum_manager = curriculum_manager
         self.current_episode_spawners = None
+        self.current_episode_enemies = None
         self.current_episode_reward = None
         self.current_episode_length = None
         self.current_episode_wins = None
+        self.current_episode_damage_taken = None
     
     def _on_training_start(self) -> None:
         if not self.curriculum_manager or not self.curriculum_manager.enabled:
             return
         n_envs = getattr(self.training_env, "num_envs", 1)
         self.current_episode_spawners = np.zeros(n_envs, dtype=np.int32)
+        self.current_episode_enemies = np.zeros(n_envs, dtype=np.int32)
         self.current_episode_reward = np.zeros(n_envs, dtype=np.float32)
         self.current_episode_length = np.zeros(n_envs, dtype=np.int32)
         self.current_episode_wins = np.zeros(n_envs, dtype=np.int32)
+        self.current_episode_damage_taken = np.zeros(n_envs, dtype=np.float32)
         
         # Log initial stage
         self.logger.record("curriculum/stage", self.curriculum_manager.current_stage_index)
@@ -235,6 +239,10 @@ class CurriculumCallback(BaseCallback):
         
         for i, info in enumerate(infos):
             self.current_episode_spawners[i] += int(info.get("spawners_destroyed", 0))
+            self.current_episode_enemies[i] += int(info.get("enemies_destroyed", 0))
+            # Track damage taken (negative rewards from damage)
+            if rewards[i] < 0:
+                self.current_episode_damage_taken[i] += abs(rewards[i])
             if info.get("win", False):
                 self.current_episode_wins[i] = 1
         
@@ -242,19 +250,30 @@ class CurriculumCallback(BaseCallback):
         if np.any(dones):
             finished = np.flatnonzero(dones)
             for i in finished:
+                # Calculate damage dealt (estimate from kills and rewards)
+                enemy_kills = int(self.current_episode_enemies[i])
+                spawner_kills = int(self.current_episode_spawners[i])
+                # Rough estimate: each enemy ~10 damage, spawner ~50 damage
+                damage_dealt = enemy_kills * 10.0 + spawner_kills * 50.0
+                
                 # Report to curriculum manager
                 self.curriculum_manager.record_episode(
-                    spawners_killed=int(self.current_episode_spawners[i]),
+                    spawners_killed=spawner_kills,
                     won=bool(self.current_episode_wins[i]),
                     length=int(self.current_episode_length[i]),
-                    reward=float(self.current_episode_reward[i])
+                    reward=float(self.current_episode_reward[i]),
+                    enemy_kills=enemy_kills,
+                    damage_dealt=damage_dealt,
+                    damage_taken=float(self.current_episode_damage_taken[i])
                 )
                 
                 # Reset counters for this env
                 self.current_episode_spawners[i] = 0
+                self.current_episode_enemies[i] = 0
                 self.current_episode_reward[i] = 0.0
                 self.current_episode_length[i] = 0
                 self.current_episode_wins[i] = 0
+                self.current_episode_damage_taken[i] = 0.0
             
             # Check for advancement
             if self.curriculum_manager.check_advancement():

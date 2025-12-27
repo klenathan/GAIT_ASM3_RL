@@ -224,13 +224,13 @@ class PPOHyperparams:
     ent_coef: float = 0.05
     vf_coef: float = 1.0
     max_grad_norm: float = 0.5
-    target_kl: float = 0.05
+    target_kl: float = 0.03
     verbose: int = 0
 
 @dataclass
 class A2CHyperparams:
     learning_rate: float = 2.5e-4
-    n_steps: int = 128  # Much longer rollouts for credit assignment
+    n_steps: int = 128  
     gamma: float = 0.99
     gae_lambda: float = 1.0
     ent_coef: float = 0.05  # Higher entropy for better exploration
@@ -253,7 +253,7 @@ class PPOLSTMHyperparams(PPOHyperparams):
     ent_coef: float = 0.05 
     vf_coef: float = 1.0
     max_grad_norm: float = 0.5 
-    target_kl: float = 0.08
+    target_kl: float = 0.03
     verbose: int = 0
 
 # Default hyperparameter instances (equivalent to old config)

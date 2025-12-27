@@ -89,15 +89,45 @@ class Evaluator:
     def _find_vecnormalize_stats(self, model_path: str) -> str:
         """Find VecNormalize stats file matching the model."""
         import glob
+        import re
 
         model_dir = os.path.dirname(model_path)
         model_name = os.path.basename(model_path).replace('.zip', '')
 
-        # Extract run prefix (e.g., ppo_style2_20251222_154509)
-        parts = model_name.split('_')
-        if len(parts) >= 4:
-            # Try to find matching vecnormalize file in same directory (new structure)
-            run_prefix = '_'.join(parts[:4])  # algo_styleX_YYYYMMDD_HHMMSS
+        # Extract run prefix based on model name format
+        # Format: {algo}_style{N}_{YYYYMMDD}_{HHMMSS}[_NUMBERS_steps or _final]
+        run_prefix = None
+        
+        # Try to extract step count to get prefix before it
+        step_match = re.search(r'_(\d+)_steps', model_name)
+        if step_match:
+            run_prefix = model_name[:step_match.start()]
+        elif model_name.endswith('_final'):
+            # Remove the _final suffix to get the prefix
+            run_prefix = model_name[:-6]  # Remove '_final'
+        else:
+            # Fallback: try to match the pattern {algo}_style{N}_{date}_{time}
+            pattern_match = re.match(r'(.+_style\d+_\d{8}_\d{6})', model_name)
+            if pattern_match:
+                run_prefix = pattern_match.group(1)
+        
+        if run_prefix:
+            # Special handling for final models
+            if model_name.endswith('_final'):
+                # Look for the exact final vecnormalize file first
+                final_pattern = os.path.join(model_dir, f"{run_prefix}_vecnormalize_final.pkl")
+                if os.path.exists(final_pattern):
+                    return final_pattern
+                
+                # If final vecnormalize doesn't exist, look in checkpoints directory for latest
+                parent_dir = os.path.dirname(model_dir)
+                checkpoints_dir = os.path.join(parent_dir, 'checkpoints')
+                if os.path.exists(checkpoints_dir):
+                    pattern = os.path.join(checkpoints_dir, f"{run_prefix}_vecnormalize*.pkl")
+                    matches = sorted(glob.glob(pattern), reverse=True)
+                    if matches:
+                        return matches[0]
+            
             pattern = os.path.join(
                 model_dir, f"{run_prefix}_vecnormalize*.pkl")
             matches = sorted(glob.glob(pattern), reverse=True)  # Latest first
@@ -184,6 +214,9 @@ class Evaluator:
                     if event.key == pygame.K_d:
                         self.renderer.show_debug = not self.renderer.show_debug
 
+            # Save LSTM states before predict (for proper extraction)
+            lstm_states_for_extraction = lstm_states if self.is_recurrent else None
+            
             # Predict action (obs is already an array from VecEnv)
             if self.is_recurrent:
                 # RecurrentPPO: pass lstm_states and episode_start flag
@@ -209,11 +242,11 @@ class Evaluator:
                 obs_single = obs[0]
 
             # Extract and visualize model output (use first element for single env)
-            # For recurrent models, pass lstm_states and episode_start for proper extraction
-            # episode_start should be passed as array (or None for non-recurrent)
+            # For recurrent models, use lstm_states BEFORE predict for proper extraction
+            # This ensures we extract with the same states that were used during predict
             output = self.output_extractor.extract(
                 self.model, obs_single, action_scalar, 
-                lstm_states=lstm_states if self.is_recurrent else None, 
+                lstm_states=lstm_states_for_extraction if self.is_recurrent else None, 
                 episode_start=episode_start if self.is_recurrent else None
             )
             self.renderer.set_model_output(output, style)
