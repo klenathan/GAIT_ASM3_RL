@@ -4,8 +4,9 @@ from config import *
 
 
 class GridWorld:
-    def __init__(self, level_idx=0):
+    def __init__(self, level_idx=0, use_intrinsic_reward=False):
         self.level_idx = level_idx
+        self.use_intrinsic_reward = use_intrinsic_reward
         self.width = GRID_WIDTH
         self.height = GRID_HEIGHT
         self.layout = LEVELS[level_idx]
@@ -52,20 +53,49 @@ class GridWorld:
         # Specification says "Task 1: learn shortest-path".
 
         # Minimal state for basic Q-learning (Level 0, 1):
-        if self.level_idx <= 1:
+        # Helper for sorting items to ensure canonical state representation
+
+        # For Level 0 and 1, just agent pos
+        if self.level_idx <= 1 and not self.monsters:
+            # If monsters exist in level 1 (unlikely based on layout but possible), we might care about them?
+            # Task 1/2 say Level 0/1, so simple pos is fine.
             return tuple(self.agent_pos)
 
-        # For levels with objectives, we need to track them.
-        # To keep state space manageable, we can use binary flags for specific known items if quantities are small.
-        # Or just tuple of sorted remaining items.
+        # For Levels with dynamic elements or complex state
+        # Monsters position matters? For Q-learning to avoid them, yes.
+        # If monsters move randomly, do we track them?
+        # Task 4 says "Agent must learn to avoid monsters". If they move 40% of time, the transition is stochastic.
+        # But if the monster is part of the state, the state space explodes: (AgentPos, Monster1Pos, Monster2Pos...)
 
-        # Frozen dict or tuple for hashability
-        return (
-            tuple(self.agent_pos),
-            self.has_key,
-            tuple(sorted(self.collected_apples)),
-            tuple(sorted(self.opened_chests)),
+        # Start with Agent Pos
+        state_components = [tuple(self.agent_pos)]
+
+        # Add Key status
+        if self.keys or self.has_key:
+            state_components.append(self.has_key)
+
+        # Add collected status (apples/chests/keys) - actually just knowing if we have them or they are gone from map
+        # Apples: if we eat them they are gone. We need to know which are remaining to get them.
+        # Or we can track remaining apples.
+        # To keep state space smaller:
+        # Sort remaining items
+
+        remaining_apples = tuple(
+            sorted([a for a in self.apples if a not in self.collected_apples])
         )
+        state_components.append(remaining_apples)
+
+        remaining_chests = tuple(
+            sorted([c for c in self.chests if c not in self.opened_chests])
+        )
+        state_components.append(remaining_chests)
+
+        # If monsters are present, their position helps avoid them.
+        if self.monsters:
+            monster_pos = tuple(sorted([tuple(m) for m in self.monsters]))
+            state_components.append(monster_pos)
+
+        return tuple(state_components)
 
     def step(self, action):
         # Actions: 0=Up, 1=Down, 2=Left, 3=Right
@@ -77,6 +107,16 @@ class GridWorld:
         self.visit_counts[state_key] = self.visit_counts.get(state_key, 0) + 1
 
         reward = REWARD_STEP
+
+        # Calculate intrinsic reward if enabled
+        if self.use_intrinsic_reward:
+            # Reward = 1 / sqrt(n(s))
+            count = self.visit_counts.get(
+                state_key, 1
+            )  # Already incremented above, so at least 1
+            intrinsic_reward = 1.0 / np.sqrt(count)
+            # Add to step reward? Or separate? Requirement says: total reward = environment reward + intrinsic reward
+            reward += intrinsic_reward
 
         # Move agent
         dr, dc = 0, 0

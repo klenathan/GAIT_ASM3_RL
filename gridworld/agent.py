@@ -39,7 +39,7 @@ class BaseAgent:
         return random.choice(ties)
 
     def decay_epsilon(self):
-        self.epsilon = max(self.epsilon_end, self.epsilon * self.epsilon_decay)
+        self.epsilon = max(self.epsilon_end, self.epsilon - self.epsilon_decay)
 
     def update(self, state, action, reward, next_state, next_action=None):
         raise NotImplementedError

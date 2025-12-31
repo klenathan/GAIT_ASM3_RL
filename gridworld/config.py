@@ -1,4 +1,3 @@
-
 # Grid Dimensions
 GRID_WIDTH = 10
 GRID_HEIGHT = 10
@@ -17,7 +16,7 @@ COLOR_MONSTER = (200, 0, 200)
 
 # Learning Parameters
 ALPHA = 0.1  # Learning rate
-GAMMA = 0.99 # Discount factor
+GAMMA = 0.99  # Discount factor
 EPSILON_START = 1.0
 EPSILON_END = 0.01
 EPSILON_DECAY = 0.995
@@ -27,11 +26,13 @@ REWARD_STEP = -0.01
 REWARD_APPLE = 1.0
 REWARD_CHEST = 2.0
 REWARD_DEATH = -10.0
-REWARD_WIN = 10.0 # Bonus for completing all objectives
+REWARD_WIN = 10.0  # Bonus for completing all objectives
 
 # Level Layouts
 # 0: Empty, 1: Rocks, 2: Fire, 3: Apple, 4: Chest, 5: Key, 6: Monster
 # Start position is usually (0, 0) or defined separately
+
+LEVELS = []
 
 LEVEL_0 = [
     "..........",
@@ -43,7 +44,7 @@ LEVEL_0 = [
     "..........",
     "..........",
     "..........",
-    "........A."
+    "........A.",
 ]
 
 LEVEL_1 = [
@@ -56,39 +57,79 @@ LEVEL_1 = [
     "..........",
     "..........",
     ".FFFFFFFF.",
-    "........A."
+    "........A.",
 ]
 
+# Level 2: Multiple apples, a key, a chest
 LEVEL_2 = [
     "..........",
     ".R.R.R.R..",
     ".R.R.R.R..",
-    "..........",
+    "..A.......",
     "....K.....",
     "..........",
     ".RRRRRRRR.",
-    "..........",
+    ".A........",
     ".........C",
-    "........A."
+    "........A.",
 ]
 
-LEVEL_3 = LEVEL_2 # Placeholder for now
+# Level 3: Same as Level 2 for now, or slightly harder
+LEVEL_3 = [
+    "..........",
+    "..........",
+    ".RR.RR.RR.",
+    ".K......A.",
+    ".RR.RR.RR.",
+    "..........",
+    ".RR.RR.RR.",
+    ".A......C.",
+    ".RR.RR.RR.",
+    "........A.",
+]
 
+# Level 4: Monster introduced (M)
+# M should be placed where it can move.
 LEVEL_4 = [
     "..........",
     "..........",
-    "..........",
-    "....M.....",
-    "..........",
-    "..........",
-    "....M.....",
+    "..M.......",
     "..........",
     "..........",
-    "........A."
+    ".......M..",
+    "..........",
+    "..........",
+    "..........",
+    "........A.",
 ]
 
-LEVEL_5 = LEVEL_4 # Placeholder for now
+# Level 5: More monsters or harder layout
+LEVEL_5 = [
+    "..........",
+    ".R.R...R..",
+    ".R...M.R..",
+    ".R.R...R..",
+    "..........",
+    ".R.R...R..",
+    ".R.M...R..",
+    ".R.R...R..",
+    "..........",
+    "........A.",
+]
 
-LEVEL_6 = LEVEL_0 # Intrinsic reward level
+# Level 6: Intrinsic reward - Sparse reward or deceptive
+# Same as Level 0 or empty to test exploration, but let's use a layout that requires exploration
+LEVEL_6 = [
+    "..........",
+    ".RRRRRRRR.",
+    "..........",
+    ".RRRRRRRR.",
+    "..........",
+    ".RRRRRRRR.",
+    "..........",
+    ".RRRRRRRR.",
+    "..........",
+    "........A.",
+]
 
 LEVELS = [LEVEL_0, LEVEL_1, LEVEL_2, LEVEL_3, LEVEL_4, LEVEL_5, LEVEL_6]

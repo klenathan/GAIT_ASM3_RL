@@ -46,19 +46,27 @@ def main():
         default=os.path.join(os.path.dirname(__file__), "runs"),
         help="TensorBoard log directory",
     )
+    parser.add_argument(
+        "--intrinsic", action="store_true", help="Enable intrinsic reward (Level 6)"
+    )
     args = parser.parse_args()
 
     # Init structure
-    env = GridWorld(level_idx=args.level)
+    env = GridWorld(level_idx=args.level, use_intrinsic_reward=args.intrinsic)
     actions = [0, 1, 2, 3]  # Up, Down, Left, Right
+
+    # Calculate linear epsilon decay to reach epsilon_end by the end of training
+    # or a fraction of it. Let's say we want to reach end by 90% of episodes to allow some exploitation at end.
+    # But for "Basic Q-Learning" usually linear over whole period.
+    linear_decay = (EPSILON_START - EPSILON_END) / args.episodes
 
     if args.algo == "q_learning":
         agent = QLearningAgent(
-            actions, ALPHA, GAMMA, EPSILON_START, EPSILON_END, EPSILON_DECAY
+            actions, ALPHA, GAMMA, EPSILON_START, EPSILON_END, linear_decay
         )
     else:
         agent = SARSAAgent(
-            actions, ALPHA, GAMMA, EPSILON_START, EPSILON_END, EPSILON_DECAY
+            actions, ALPHA, GAMMA, EPSILON_START, EPSILON_END, linear_decay
         )
 
     # Models directory
@@ -95,7 +103,10 @@ def main():
 
     episode_rewards = []
 
+    best_avg_reward = -float("inf")
+
     try:
+        current_window_rewards = []
         for ep in range(args.episodes):
             state = env.reset()
             action = agent.choose_action(state)
@@ -142,6 +153,23 @@ def main():
 
             agent.decay_epsilon()
             episode_rewards.append(total_reward)
+
+            # Track best model based on moving average of last 10 episodes
+            current_window_rewards.append(total_reward)
+            if len(current_window_rewards) > 10:
+                current_window_rewards.pop(0)
+
+            avg_reward = sum(current_window_rewards) / len(current_window_rewards)
+
+            # Save best model logic
+            if args.save_model and not args.test:
+                # We save if average reward improves
+                if avg_reward > best_avg_reward:
+                    best_avg_reward = avg_reward
+                    save_path = os.path.join(models_dir, args.save_model)
+                    agent.save(save_path)
+                    # print(f"New best average reward: {best_avg_reward:.2f}. Model saved.")
+
             # print(f"Episode {ep}: Reward {total_reward:.2f}, Epsilon {agent.epsilon:.2f}")
 
             if writer:
@@ -158,19 +186,26 @@ def main():
     if writer:
         writer.close()
 
-    # Plotting is useful but maybe optional for CLI run?
-    # Let's save a plot
+    # Construct unique filename components
+    suffix = ""
+    if args.intrinsic:
+        suffix = "_intrinsic"
+
+    # Plotting
     plt.plot(episode_rewards)
-    plt.title(f"Training Curve - Level {args.level} - {args.algo}")
+    plt.title(f"Training Curve - Level {args.level} - {args.algo}{suffix}")
     plt.xlabel("Episode")
     plt.xscale("log")
     plt.ylabel("Total Reward")
-    plt.savefig(f"outcomes/training_level_{args.level}_{args.algo}.png")
-    print(f"Training finished. Plot saved to outcomes/")
 
-    if args.save_model:
-        save_path = os.path.join(models_dir, args.save_model)
-        agent.save(save_path)
+    plot_filename = f"outcomes/training_level_{args.level}_{args.algo}{suffix}.png"
+    plt.savefig(plot_filename)
+    print(f"Training finished. Plot saved to {plot_filename}")
+
+    # We no longer save unconditionally at the end to avoid overwriting the best model
+    # if args.save_model:
+    #     save_path = os.path.join(models_dir, args.save_model)
+    #     agent.save(save_path)
 
 
 if __name__ == "__main__":

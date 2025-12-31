@@ -22,3 +22,8 @@ build/
 *.egg-info/
 models/*.zip
 logs/*
+*.pkl
+*.png
+gridworld/models/level4_q.pkl
+*.pkl
+/gridworld/runs
