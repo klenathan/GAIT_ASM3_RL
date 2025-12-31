@@ -49,6 +49,15 @@ def main():
     parser.add_argument(
         "--intrinsic", action="store_true", help="Enable intrinsic reward (Level 6)"
     )
+    parser.add_argument(
+        "--intrinsic", action="store_true", help="Enable intrinsic reward (Level 6)"
+    )
+    parser.add_argument(
+        "--checkpoint_interval",
+        type=int,
+        default=1000,
+        help="Interval (in episodes) to save model checkpoints",
+    )
     args = parser.parse_args()
 
     # Init structure
@@ -104,6 +113,7 @@ def main():
     episode_rewards = []
 
     best_avg_reward = -float("inf")
+    last_ckpt_path = None
 
     try:
         current_window_rewards = []
@@ -169,6 +179,23 @@ def main():
                     save_path = os.path.join(models_dir, args.save_model)
                     agent.save(save_path)
                     # print(f"New best average reward: {best_avg_reward:.2f}. Model saved.")
+
+                # Checkpoint logic
+                if (ep + 1) % args.checkpoint_interval == 0:
+                    base_name, ext = os.path.splitext(args.save_model)
+                    ckpt_name = f"{base_name}_ep{ep+1}{ext}"
+                    ckpt_path = os.path.join(models_dir, ckpt_name)
+                    agent.save(ckpt_path)
+
+                    # Cleanup old checkpoint
+                    if last_ckpt_path and os.path.exists(last_ckpt_path):
+                        try:
+                            os.remove(last_ckpt_path)
+                        except OSError as e:
+                            print(f"Error deleting old checkpoint: {e}")
+
+                    last_ckpt_path = ckpt_path
+                    # print(f"Checkpoint saved: {ckpt_path}")
 
             # print(f"Episode {ep}: Reward {total_reward:.2f}, Epsilon {agent.epsilon:.2f}")
 
