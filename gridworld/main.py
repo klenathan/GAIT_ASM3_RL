@@ -49,9 +49,7 @@ def main():
     parser.add_argument(
         "--intrinsic", action="store_true", help="Enable intrinsic reward (Level 6)"
     )
-    parser.add_argument(
-        "--intrinsic", action="store_true", help="Enable intrinsic reward (Level 6)"
-    )
+
     parser.add_argument(
         "--checkpoint_interval",
         type=int,
