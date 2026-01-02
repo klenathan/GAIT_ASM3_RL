@@ -2,7 +2,7 @@
 Model evaluation logic for Deep RL Arena.
 """
 
-from arena.training.algorithms import dqn, ppo, ppo_lstm, a2c
+from arena.training.algorithms import dqn, ppo, ppo_lstm, a2c, ppo_torch_trainer
 from arena.training.registry import AlgorithmRegistry
 from arena.ui.model_output import ModelOutputExtractor
 from arena.ui.menu import Menu
@@ -15,6 +15,7 @@ from arena.core.device import DeviceManager
 from arena.core.config import TrainerConfig
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 import torch
+import json
 import numpy as np
 import pygame
 import glob
@@ -55,24 +56,55 @@ class Evaluator:
         return "ppo"  # Default fallback
 
     def load_model(self, model_path: str, algo: str = None):
-        """Load a trained model with automatic algorithm detection."""
+        """Load a trained model with automatic algorithm detection (supports SB3 .zip and PyTorch .pt)."""
         if not algo:
             algo = self._infer_algo(model_path)
 
         print(f"Loading model: {model_path} (Algo: {algo})")
+        
+        # Detect if it's a PyTorch model
+        is_pytorch_model = model_path.endswith('.pt')
 
         try:
-            trainer_class = AlgorithmRegistry.get(algo)
-            algo_class = trainer_class.algorithm_class
-            self.model = algo_class.load(model_path, device=self.device)
-            self.is_recurrent = "Lstm" in trainer_class.policy_type
-            self.current_algo = algo
-            return True
+            if is_pytorch_model:
+                # Load PyTorch model
+                from arena.training.algorithms.ppo_torch import TorchPPO
+                
+                # Get observation and action dimensions from a temporary env
+                temp_env = ArenaEnv(control_style=2)  # Assuming style 2, will be overridden
+                obs_dim = temp_env.observation_space.shape[0]
+                action_dim = temp_env.action_space.n
+                temp_env.close()
+                
+                # Create TorchPPO model
+                self.model = TorchPPO(
+                    obs_dim=obs_dim,
+                    action_dim=action_dim,
+                    device=str(self.device),
+                )
+                self.model.load(model_path)
+                self.is_recurrent = False
+                self.current_algo = algo
+                print(f"✓ Successfully loaded PyTorch model")
+                return True
+            else:
+                # Load SB3 model
+                trainer_class = AlgorithmRegistry.get(algo)
+                algo_class = trainer_class.algorithm_class
+                self.model = algo_class.load(model_path, device=self.device)
+                self.is_recurrent = "Lstm" in trainer_class.policy_type
+                self.current_algo = algo
+                return True
         except Exception as e:
             print(f"Failed to load as {algo}: {e}")
-            # Try other loaders
+            
+            if is_pytorch_model:
+                # PyTorch models don't have fallback options yet
+                return False
+            
+            # Try other SB3 loaders
             for other_algo in AlgorithmRegistry.list_algorithms():
-                if other_algo == algo:
+                if other_algo == algo or 'torch' in other_algo:
                     continue
                 try:
                     trainer_class = AlgorithmRegistry.get(other_algo)
@@ -152,6 +184,29 @@ class Evaluator:
         pattern = os.path.join(model_dir, "*vecnormalize*.pkl")
         matches = sorted(glob.glob(pattern), reverse=True)
         return matches[0] if matches else None
+    
+    def _find_normalization_json(self, model_path: str) -> str:
+        """Find normalization JSON file for PyTorch models."""
+        # For PyTorch models, normalization stats are in JSON format
+        model_dir = os.path.dirname(model_path)
+        model_name = os.path.basename(model_path).replace('.pt', '')
+        
+        # Try direct match
+        json_path = model_path.replace('.pt', '_normalization.json')
+        if os.path.exists(json_path):
+            return json_path
+        
+        # Try with _final suffix
+        if model_name.endswith('_final'):
+            run_prefix = model_name[:-6]
+            json_path = os.path.join(model_dir, f"{run_prefix}_normalization_final.json")
+            if os.path.exists(json_path):
+                return json_path
+        
+        # Search pattern
+        pattern = os.path.join(model_dir, "*normalization*.json")
+        matches = sorted(glob.glob(pattern), reverse=True)
+        return matches[0] if matches else None
 
     def run_session(self, model_path: str, style: int, deterministic: bool = True):
         """Run a single evaluation session."""
@@ -161,6 +216,9 @@ class Evaluator:
         if self.env:
             self.env.close()
 
+        # Check if it's a PyTorch model
+        is_pytorch_model = model_path.endswith('.pt')
+        
         # Create base environment - use ArenaDictEnv for ppo_dict, ArenaEnv for others
         if self.current_algo == "ppo_dict":
             base_env = ArenaDictEnv(control_style=style, render_mode=None)
@@ -170,22 +228,50 @@ class Evaluator:
         base_env.renderer = self.renderer
         base_env._owns_renderer = False
 
-        # Wrap in DummyVecEnv for VecNormalize compatibility
-        vec_env = DummyVecEnv([lambda: base_env])
-
-        # Try to load VecNormalize stats
-        vecnorm_path = self._find_vecnormalize_stats(model_path)
-        if vecnorm_path and os.path.exists(vecnorm_path):
-            print(
-                f"✓ Loading VecNormalize stats from: {os.path.basename(vecnorm_path)}")
-            self.env = VecNormalize.load(vecnorm_path, vec_env)
-            self.env.training = False  # Disable stats updates during eval
-            self.env.norm_reward = False  # Don't normalize rewards during eval
-            print(
-                "✓ VecNormalize stats applied successfully (observations will be normalized)")
+        if is_pytorch_model:
+            # For PyTorch models, wrap in a simple wrapper that handles normalization
+            from arena.core.vec_env import TorchVecEnv
+            
+            # Create TorchVecEnv with single environment
+            self.env = TorchVecEnv(
+                env_fns=[lambda: base_env],
+                device=str(self.device),
+                normalize_obs=True,
+                normalize_reward=False,  # Don't normalize rewards during eval
+            )
+            
+            # Load normalization stats if available
+            json_path = self._find_normalization_json(model_path)
+            if json_path and os.path.exists(json_path):
+                print(f"✓ Loading normalization stats from: {os.path.basename(json_path)}")
+                with open(json_path, 'r') as f:
+                    stats = json.load(f)
+                    # Convert lists back to numpy
+                    for key in stats:
+                        if isinstance(stats[key], list):
+                            stats[key] = np.array(stats[key])
+                    self.env.set_normalization_stats(stats)
+                print("✓ Normalization stats applied successfully")
+            else:
+                print("⚠ WARNING: No normalization stats found!")
+                print("⚠ Model will receive raw observations (may cause poor performance)")
         else:
-            print("⚠ WARNING: No VecNormalize stats found!")
-            print("⚠ Model will receive raw observations (may cause poor performance)")
+            # Wrap in DummyVecEnv for VecNormalize compatibility (SB3 models)
+            vec_env = DummyVecEnv([lambda: base_env])
+
+            # Try to load VecNormalize stats
+            vecnorm_path = self._find_vecnormalize_stats(model_path)
+            if vecnorm_path and os.path.exists(vecnorm_path):
+                print(
+                    f"✓ Loading VecNormalize stats from: {os.path.basename(vecnorm_path)}")
+                self.env = VecNormalize.load(vecnorm_path, vec_env)
+                self.env.training = False  # Disable stats updates during eval
+                self.env.norm_reward = False  # Don't normalize rewards during eval
+                print(
+                    "✓ VecNormalize stats applied successfully (observations will be normalized)")
+            else:
+                print("⚠ WARNING: No VecNormalize stats found!")
+                print("⚠ Model will receive raw observations (may cause poor performance)")
             print("⚠ This is expected for old models but indicates a bug for new models")
             self.env = vec_env
 
@@ -221,14 +307,29 @@ class Evaluator:
             lstm_states_for_extraction = lstm_states if self.is_recurrent else None
 
             # Predict action (obs is already an array from VecEnv)
-            if self.is_recurrent:
+            is_pytorch_model = hasattr(self.model, 'policy')  # TorchPPO has 'policy' attribute
+            
+            if is_pytorch_model:
+                # PyTorch model prediction
+                # Convert obs to tensor if needed
+                if isinstance(obs, np.ndarray):
+                    obs_tensor = torch.from_numpy(obs).float().to(self.device)
+                else:
+                    obs_tensor = obs
+                
+                action = self.model.predict(obs_tensor, deterministic=deterministic)
+                
+                # Convert back to numpy
+                if isinstance(action, torch.Tensor):
+                    action = action.cpu().numpy()
+            elif self.is_recurrent:
                 # RecurrentPPO: pass lstm_states and episode_start flag
                 # lstm_states=None triggers initialization on first call or after reset
                 action, lstm_states = self.model.predict(
                     obs, state=lstm_states, episode_start=episode_start, deterministic=deterministic
                 )
             else:
-                # Non-recurrent: standard prediction
+                # Non-recurrent SB3: standard prediction
                 action, _ = self.model.predict(
                     obs, deterministic=deterministic)
 

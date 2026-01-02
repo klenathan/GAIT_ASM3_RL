@@ -19,6 +19,10 @@ dependencies = [
     "torchaudio",
     "sb3-contrib>=2.7.1",
     "pygame-emojis>=0.2.0",
+    "tensordict>=0.3.0",
+    "torchrl>=0.3.0",
+    "tqdm>=4.67.1",
+    "rich>=14.2.0",
 ]
 
 
