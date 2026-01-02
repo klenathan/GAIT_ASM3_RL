@@ -43,7 +43,7 @@ def main():
     parser.add_argument(
         "--tensorboard_log",
         type=str,
-        default=os.path.join(os.path.dirname(__file__), "runs"),
+        default=os.path.join(os.path.abspath(os.path.dirname(__file__)), "runs"),
         help="TensorBoard log directory",
     )
     parser.add_argument(
@@ -100,8 +100,10 @@ def main():
 
     writer = None
     if SummaryWriter and not args.test:
+        suffix = "_intrinsic" if args.intrinsic else ""
         log_dir = os.path.join(
-            args.tensorboard_log, f"{args.algo}_level{args.level}_{int(time.time())}"
+            args.tensorboard_log,
+            f"{args.algo}_level{args.level}{suffix}_{int(time.time())}",
         )
         writer = SummaryWriter(log_dir)
         print(f"Logging to TensorBoard: {log_dir}")
@@ -162,6 +164,14 @@ def main():
             agent.decay_epsilon()
             episode_rewards.append(total_reward)
 
+            # Log to TensorBoard
+            if writer:
+                writer.add_scalar("rollout/ep_rew_mean", total_reward, ep)
+                writer.add_scalar("train/epsilon", agent.epsilon, ep)
+                writer.add_scalar("rollout/ep_len_mean", steps, ep)
+                if (ep + 1) % 100 == 0:
+                    writer.flush()
+
             # Track best model based on moving average of last 10 episodes
             current_window_rewards.append(total_reward)
             if len(current_window_rewards) > 10:
@@ -196,11 +206,6 @@ def main():
                     # print(f"Checkpoint saved: {ckpt_path}")
 
             # print(f"Episode {ep}: Reward {total_reward:.2f}, Epsilon {agent.epsilon:.2f}")
-
-            if writer:
-                writer.add_scalar("rollout/ep_rew_mean", total_reward, ep)
-                writer.add_scalar("train/epsilon", agent.epsilon, ep)
-                writer.add_scalar("rollout/ep_len_mean", steps, ep)
 
     except KeyboardInterrupt:
         print("Training interrupted.")
