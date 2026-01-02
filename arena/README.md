@@ -34,7 +34,7 @@ Train an agent using the modular trainer:
 uv run python -m arena.train --algo dqn --style 1 --steps 100000
 
 # PPO with directional controls (Style 2)
-uv run python -m arena.train --algo ppo --style 2 --steps 100000
+uv run python -m arena.train --algo ppo --style 2 --steps 20000000 --no-render --device cpu
 
 # Recurrent PPO (LSTM)
 uv run python -m arena.train --algo ppo_lstm --style 1

@@ -18,6 +18,7 @@ def parse_args():
     parser.add_argument("--steps", type=int, help="Override total timesteps")
     parser.add_argument("--lr", type=float, help="Override learning rate")
     parser.add_argument("--batch", type=int, help="Override batch size")
+    parser.add_argument("--num-envs", type=int, help="Number of parallel environments")
     parser.add_argument("--tensorboard", action="store_true", default=True)
     parser.add_argument("--no-render", action="store_true", help="Disable rendering")
     parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda", "mps"])
@@ -46,6 +47,7 @@ def main():
         style=args.style,
         device=args.device,
         render=not args.no_render,
+        num_envs=args.num_envs,
         pretrained_model_path=args.load_model,
         reset_num_timesteps=reset_num_timesteps,
     )
