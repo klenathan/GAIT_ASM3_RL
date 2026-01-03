@@ -9,6 +9,7 @@ from arena.ui.menu import Menu
 from arena.ui.renderer import ArenaRenderer
 from arena.game.human_controller import HumanController
 from arena.core.environment_dict import ArenaDictEnv
+from arena.core.environment_cnn import ArenaCNNEnv
 from arena.core.environment import ArenaEnv
 from arena.core import config
 from arena.core.device import DeviceManager
@@ -161,9 +162,11 @@ class Evaluator:
         if self.env:
             self.env.close()
 
-        # Create base environment - use ArenaDictEnv for ppo_dict, ArenaEnv for others
+        # Create base environment - use ArenaDictEnv for ppo_dict, ArenaCNNEnv for ppo_cnn, ArenaEnv for others
         if self.current_algo == "ppo_dict":
             base_env = ArenaDictEnv(control_style=style, render_mode=None)
+        elif self.current_algo == "ppo_cnn":
+            base_env = ArenaCNNEnv(control_style=style, render_mode=None)
         else:
             base_env = ArenaEnv(control_style=style, render_mode=None)
         base_env.render_mode = "human"
