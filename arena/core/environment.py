@@ -101,6 +101,11 @@ class ArenaEnv(gym.Env):
         self._prev_player_health = None
 
         self.player = Player(config.GAME_WIDTH / 2, config.GAME_HEIGHT / 2)
+        
+        # For Style 2: randomize player rotation at episode start (used as fixed shooting angle)
+        if self.control_style == 2:
+            self.player.rotation = self.np_random.uniform(0, 2 * math.pi)
+        
         self.enemies = []
         self.spawners = []
         self.projectiles = []
@@ -127,6 +132,9 @@ class ArenaEnv(gym.Env):
                 (self.control_style == 2 and action == 5)):
             if self.player.shoot():
                 reward += float(config.REWARD_SHOT_FIRED)
+                # Both styles use player.rotation for shooting
+                # Style 1: rotation follows player's facing direction
+                # Style 2: rotation is fixed (randomized at episode start)
                 proj = Projectile(self.player.pos[0], self.player.pos[1],
                                   self.player.rotation, is_player_projectile=True)
                 self.projectiles.append(proj)

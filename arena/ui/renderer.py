@@ -584,6 +584,10 @@ class ArenaRenderer:
                                 env.player.health, env.player.max_health)
             self._draw_debug_velocity(
                 env.player.pos, env.player.velocity, (100, 255, 100))
+            
+            # Draw shooting angle indicator for Style 2
+            if env.control_style == 2:
+                self._draw_shooting_angle(env.player.pos, env.player.rotation)
 
         for enemy in env.enemies:
             if enemy.alive:
@@ -656,6 +660,40 @@ class ArenaRenderer:
                            int(end_pos[1] - arrow_size * math.sin(right_angle)))
             pygame.draw.polygon(self.screen, color,
                                 [(int(end_pos[0]), int(end_pos[1])), left_point, right_point])
+
+    def _draw_shooting_angle(self, pos, angle):
+        """Draw shooting angle indicator for Style 2 (fixed shooting direction)."""
+        scaled_pos = self._spos(pos)
+        arrow_length = self._s(60)  # Length of the shooting direction arrow
+        
+        # Calculate end point
+        end_x = scaled_pos[0] + math.cos(angle) * arrow_length
+        end_y = scaled_pos[1] + math.sin(angle) * arrow_length
+        
+        # Draw main line (cyan color to distinguish from velocity)
+        color = (0, 255, 255)  # Cyan
+        pygame.draw.line(self.screen, color,
+                         (int(scaled_pos[0]), int(scaled_pos[1])),
+                         (int(end_x), int(end_y)), 3)
+        
+        # Draw arrowhead
+        arrow_size = self._s(10)
+        left_angle = angle + 2.5
+        right_angle = angle - 2.5
+        left_point = (int(end_x - arrow_size * math.cos(left_angle)),
+                      int(end_y - arrow_size * math.sin(left_angle)))
+        right_point = (int(end_x - arrow_size * math.cos(right_angle)),
+                       int(end_y - arrow_size * math.sin(right_angle)))
+        pygame.draw.polygon(self.screen, color,
+                            [(int(end_x), int(end_y)), left_point, right_point])
+        
+        # Draw angle label
+        angle_deg = math.degrees(angle) % 360
+        angle_text = f"Shoot: {angle_deg:.0f}°"
+        text_surf = self.small_font.render(angle_text, True, color)
+        text_x = int(scaled_pos[0] + math.cos(angle) * (arrow_length + self._s(15)))
+        text_y = int(scaled_pos[1] + math.sin(angle) * (arrow_length + self._s(15)))
+        self.screen.blit(text_surf, (text_x, text_y))
 
     def _draw_debug_line(self, x, y, label, value):
         """Draw a single debug info line."""

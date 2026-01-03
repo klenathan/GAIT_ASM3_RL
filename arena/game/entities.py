@@ -59,8 +59,8 @@ class Player:
         elif action == 4:  # Right
             self.velocity[0] = config.PLAYER_SPEED
 
-        if utils.magnitude(self.velocity) > 0:
-            self.rotation = math.atan2(self.velocity[1], self.velocity[0])
+        # Note: rotation is NOT updated here for Style 2
+        # It is set randomly at episode start and used as fixed shooting angle
 
         self.pos += self.velocity
         self.pos = utils.keep_in_bounds(
