@@ -184,8 +184,8 @@ class TrainerConfig:
     load_replay_buffer: bool = True   # Load replay buffer (DQN only)
 
     # Learning rate schedule
-    lr_schedule: str = "constant"  # "constant", "linear", "exponential", "cosine"
-    lr_end: Optional[float] = None  # Final LR; defaults to start_lr * 0.1
+    lr_schedule: str = "cosine"  # "constant", "linear", "exponential", "cosine"
+    lr_end: Optional[float] = 1e-6  # Final LR; defaults to start_lr * 0.1
     # Fraction of training for warmup (0 = none)
     lr_warmup_fraction: float = 0.0
 
