@@ -14,9 +14,11 @@ import numpy as np
 from gymnasium import spaces
 import gymnasium as gym
 import warnings
+
 # Suppress pkg_resources deprecation warning from pygame
 warnings.filterwarnings(
-    "ignore", message=".*pkg_resources is deprecated.*", category=UserWarning)
+    "ignore", message=".*pkg_resources is deprecated.*", category=UserWarning
+)
 
 
 class ArenaEnv(gym.Env):
@@ -28,10 +30,14 @@ class ArenaEnv(gym.Env):
     - Style 2: Directional Movement (6 actions)
     """
 
-    metadata = {"render_modes": [
-        "human", "rgb_array"], "render_fps": config.FPS}
+    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": config.FPS}
 
-    def __init__(self, control_style=1, render_mode=None, curriculum_manager: CurriculumManager = None):
+    def __init__(
+        self,
+        control_style=1,
+        render_mode=None,
+        curriculum_manager: CurriculumManager = None,
+    ):
         super().__init__()
 
         self.control_style = control_style
@@ -101,11 +107,11 @@ class ArenaEnv(gym.Env):
         self._prev_player_health = None
 
         self.player = Player(config.GAME_WIDTH / 2, config.GAME_HEIGHT / 2)
-        
+
         # For Style 2: randomize player rotation at episode start (used as fixed shooting angle)
         if self.control_style == 2:
             self.player.rotation = self.np_random.uniform(0, 2 * math.pi)
-        
+
         self.enemies = []
         self.spawners = []
         self.projectiles = []
@@ -128,15 +134,20 @@ class ArenaEnv(gym.Env):
         else:
             self.player.update_style_2(action)
 
-        if ((self.control_style == 1 and action == 4) or
-                (self.control_style == 2 and action == 5)):
+        if (self.control_style == 1 and action == 4) or (
+            self.control_style == 2 and action == 5
+        ):
             if self.player.shoot():
                 reward += float(config.REWARD_SHOT_FIRED)
                 # Both styles use player.rotation for shooting
                 # Style 1: rotation follows player's facing direction
                 # Style 2: rotation is fixed (randomized at episode start)
-                proj = Projectile(self.player.pos[0], self.player.pos[1],
-                                  self.player.rotation, is_player_projectile=True)
+                proj = Projectile(
+                    self.player.pos[0],
+                    self.player.pos[1],
+                    self.player.rotation,
+                    is_player_projectile=True,
+                )
                 self.projectiles.append(proj)
 
         for enemy in self.enemies:
@@ -144,25 +155,28 @@ class ArenaEnv(gym.Env):
                 enemy.update(self.player.pos)
                 if enemy.shoot(self.player.pos, self.np_random):
                     angle = utils.angle_to_point(enemy.pos, self.player.pos)
-                    self.projectiles.append(Projectile(
-                        enemy.pos[0], enemy.pos[1], angle, False))
+                    self.projectiles.append(
+                        Projectile(enemy.pos[0], enemy.pos[1], angle, False)
+                    )
 
         phase_cfg = config.PHASE_CONFIG[self.current_phase]
 
         # Apply curriculum modifiers
         max_enemies = config.SPAWNER_MAX_ENEMIES
-        enemy_speed = phase_cfg['enemy_speed_mult']
+        enemy_speed = phase_cfg["enemy_speed_mult"]
         if self.curriculum_stage:
-            max_enemies = int(
-                max_enemies * self.curriculum_stage.max_enemies_mult)
+            max_enemies = int(max_enemies * self.curriculum_stage.max_enemies_mult)
             enemy_speed *= self.curriculum_stage.enemy_speed_mult
 
         for spawner in self.spawners:
             if spawner.alive:
                 spawner.update()
-                if spawner.can_spawn(len([e for e in self.enemies if e.alive]), max_enemies):
+                if spawner.can_spawn(
+                    len([e for e in self.enemies if e.alive]), max_enemies
+                ):
                     new_enemy = spawner.spawn_enemy(
-                        self.np_random, enemy_speed, existing_enemies=self.enemies)
+                        self.np_random, enemy_speed, existing_enemies=self.enemies
+                    )
                     if new_enemy:
                         self.enemies.append(new_enemy)
 
@@ -207,10 +221,10 @@ class ArenaEnv(gym.Env):
 
         if self.renderer:
             metrics = {
-                'episode': 0,
-                'episode_reward': self.episode_reward,
-                'total_reward': self.episode_reward,
-                'timesteps': self.current_step,
+                "episode": 0,
+                "episode_reward": self.episode_reward,
+                "total_reward": self.episode_reward,
+                "timesteps": self.current_step,
             }
             self.renderer.render(self, metrics)
 
@@ -227,7 +241,7 @@ class ArenaEnv(gym.Env):
 
     def _init_phase(self):
         phase_cfg = config.PHASE_CONFIG[self.current_phase]
-        num = phase_cfg['spawners']
+        num = phase_cfg["spawners"]
         self.enemies = []
 
         for i in range(num):
@@ -236,13 +250,15 @@ class ArenaEnv(gym.Env):
             # Add small random jitter
             x += self.np_random.uniform(-30, 30)
             y += self.np_random.uniform(-30, 30)
-            x = utils.clamp(x, config.SPAWNER_RADIUS,
-                            config.GAME_WIDTH - config.SPAWNER_RADIUS)
-            y = utils.clamp(y, config.SPAWNER_RADIUS,
-                            config.GAME_HEIGHT - config.SPAWNER_RADIUS)
+            x = utils.clamp(
+                x, config.SPAWNER_RADIUS, config.GAME_WIDTH - config.SPAWNER_RADIUS
+            )
+            y = utils.clamp(
+                y, config.SPAWNER_RADIUS, config.GAME_HEIGHT - config.SPAWNER_RADIUS
+            )
 
             # Apply curriculum modifiers to spawner
-            spawn_rate_mult = phase_cfg['spawn_rate_mult']
+            spawn_rate_mult = phase_cfg["spawn_rate_mult"]
             health_mult = 1.0
             if self.curriculum_stage:
                 spawn_rate_mult *= self.curriculum_stage.spawn_cooldown_mult
@@ -276,15 +292,26 @@ class ArenaEnv(gym.Env):
         elif total_spawners == 2:
             positions = [(margin, h / 2), (w - margin, h / 2)]
         elif total_spawners == 3:
-            positions = [(w / 2, margin), (margin, h - margin),
-                         (w - margin, h - margin)]
+            positions = [
+                (w / 2, margin),
+                (margin, h - margin),
+                (w - margin, h - margin),
+            ]
         elif total_spawners == 4:
-            positions = [(margin, margin), (w - margin, margin),
-                         (margin, h - margin), (w - margin, h - margin)]
+            positions = [
+                (margin, margin),
+                (w - margin, margin),
+                (margin, h - margin),
+                (w - margin, h - margin),
+            ]
         elif total_spawners == 5:
-            positions = [(margin, margin), (w - margin, margin),
-                         (margin, h - margin), (w - margin, h - margin),
-                         (w / 2, h / 2)]
+            positions = [
+                (margin, margin),
+                (w - margin, margin),
+                (margin, h - margin),
+                (w - margin, h - margin),
+                (w / 2, h / 2),
+            ]
         else:
             # Fallback: circular pattern
             angle = (2 * math.pi / total_spawners) * spawner_index
@@ -294,21 +321,42 @@ class ArenaEnv(gym.Env):
         return positions[spawner_index]
 
     def _get_observation(self):
-        """Build expanded observation vector (32 dims)."""
+        """Build expanded observation vector (32 dims) with agent-relative coordinates."""
         obs = np.zeros(config.OBS_DIM, dtype=np.float32)
         max_dist = math.sqrt(config.GAME_WIDTH**2 + config.GAME_HEIGHT**2)
 
-        # [0-1] Player position
-        obs[0] = self.player.pos[0] / config.GAME_WIDTH
-        obs[1] = self.player.pos[1] / config.GAME_HEIGHT
+        # Arena center
+        center_x = config.GAME_WIDTH / 2
+        center_y = config.GAME_HEIGHT / 2
 
-        # [2-3] Player velocity
-        obs[2] = np.clip(self.player.velocity[0] /
-                         config.PLAYER_MAX_VELOCITY, -1, 1)
-        obs[3] = np.clip(self.player.velocity[1] /
-                         config.PLAYER_MAX_VELOCITY, -1, 1)
+        # [0] Distance from center (normalized)
+        dist_from_center = math.sqrt(
+            (self.player.pos[0] - center_x) ** 2 + (self.player.pos[1] - center_y) ** 2
+        )
+        obs[0] = dist_from_center / max_dist
 
-        # [4] Player rotation
+        # [1] Angle to center (normalized from -π to π → 0 to 1)
+        angle_to_center = utils.angle_to_point(
+            self.player.pos, np.array([center_x, center_y])
+        )
+        obs[1] = utils.normalize_angle(angle_to_center)
+
+        # [2] Velocity magnitude (speed, normalized)
+        velocity_magnitude = math.sqrt(
+            self.player.velocity[0] ** 2 + self.player.velocity[1] ** 2
+        )
+        obs[2] = np.clip(velocity_magnitude / config.PLAYER_MAX_VELOCITY, 0, 1)
+
+        # [3] Velocity direction angle (absolute world angle, normalized)
+        if velocity_magnitude > 0.01:  # Avoid division by zero
+            velocity_angle = math.atan2(
+                self.player.velocity[1], self.player.velocity[0]
+            )
+            obs[3] = utils.normalize_angle(velocity_angle)
+        else:
+            obs[3] = 0.5  # Neutral value when not moving
+
+        # [4] Player rotation (normalized)
         obs[4] = self.player.rotation / (2 * math.pi)
 
         # [5] Player health ratio
@@ -323,9 +371,8 @@ class ArenaEnv(gym.Env):
         # [8] Spawners remaining ratio (for current phase objectives)
         # Clamp phase index to valid range (handles edge case when game ends after final phase)
         phase_idx = min(self.current_phase, config.MAX_PHASES - 1)
-        initial_spawners = config.PHASE_CONFIG[phase_idx]['spawners']
-        obs[8] = len([s for s in self.spawners if s.alive]) / \
-            max(initial_spawners, 1)
+        initial_spawners = config.PHASE_CONFIG[phase_idx]["spawners"]
+        obs[8] = len([s for s in self.spawners if s.alive]) / max(initial_spawners, 1)
 
         # [9] Time remaining ratio
         obs[9] = 1.0 - (self.current_step / config.MAX_STEPS)
@@ -335,11 +382,13 @@ class ArenaEnv(gym.Env):
         for i, enemy in enumerate(nearest_enemies):
             base_idx = 10 + i * 3
             if enemy:
-                obs[base_idx] = utils.distance(
-                    self.player.pos, enemy.pos) / max_dist
+                obs[base_idx] = utils.distance(self.player.pos, enemy.pos) / max_dist
                 obs[base_idx + 1] = utils.normalize_angle(
-                    utils.relative_angle(self.player.rotation,
-                                         utils.angle_to_point(self.player.pos, enemy.pos)))
+                    utils.relative_angle(
+                        self.player.rotation,
+                        utils.angle_to_point(self.player.pos, enemy.pos),
+                    )
+                )
                 obs[base_idx + 2] = 1.0
             else:
                 obs[base_idx], obs[base_idx + 1], obs[base_idx + 2] = 1.0, 0.5, 0.0
@@ -349,41 +398,57 @@ class ArenaEnv(gym.Env):
         for i, spawner in enumerate(nearest_spawners):
             base_idx = 16 + i * 4
             if spawner:
-                obs[base_idx] = utils.distance(
-                    self.player.pos, spawner.pos) / max_dist
+                obs[base_idx] = utils.distance(self.player.pos, spawner.pos) / max_dist
                 obs[base_idx + 1] = utils.normalize_angle(
-                    utils.relative_angle(self.player.rotation,
-                                         utils.angle_to_point(self.player.pos, spawner.pos)))
+                    utils.relative_angle(
+                        self.player.rotation,
+                        utils.angle_to_point(self.player.pos, spawner.pos),
+                    )
+                )
                 obs[base_idx + 2] = 1.0
                 obs[base_idx + 3] = spawner.health / spawner.max_health
             else:
-                obs[base_idx], obs[base_idx + 1], obs[base_idx +
-                                                      2], obs[base_idx + 3] = 1.0, 0.5, 0.0, 0.0
+                (
+                    obs[base_idx],
+                    obs[base_idx + 1],
+                    obs[base_idx + 2],
+                    obs[base_idx + 3],
+                ) = 1.0, 0.5, 0.0, 0.0
 
-        # [24-26] Projectile threat info (nearest dist, angle, count nearby)
-        proj_dist, proj_angle, proj_count = self._get_projectile_threat_info()
-        obs[24] = proj_dist / max_dist
-        obs[25] = proj_angle
-        obs[26] = min(proj_count / 5.0, 1.0)  # Normalize, cap at 5 projectiles
+        # [24-38] Nearest 5 projectiles (dist, angle, exists) x5
+        nearest_projectiles = self._find_k_nearest_projectiles(k=5)
+        for i, proj in enumerate(nearest_projectiles):
+            base_idx = 24 + i * 3
+            if proj:
+                obs[base_idx] = utils.distance(self.player.pos, proj.pos) / max_dist
+                obs[base_idx + 1] = utils.normalize_angle(
+                    utils.relative_angle(
+                        self.player.rotation,
+                        utils.angle_to_point(self.player.pos, proj.pos),
+                    )
+                )
+                obs[base_idx + 2] = 1.0
+            else:
+                obs[base_idx], obs[base_idx + 1], obs[base_idx + 2] = 1.0, 0.5, 0.0
 
-        # [27-30] Wall distances (left, right, top, bottom) - normalized
-        obs[27] = self.player.pos[0] / config.GAME_WIDTH  # Distance from left
-        # Distance from right
-        obs[28] = 1.0 - (self.player.pos[0] / config.GAME_WIDTH)
-        obs[29] = self.player.pos[1] / config.GAME_HEIGHT  # Distance from top
-        # Distance from bottom
-        obs[30] = 1.0 - (self.player.pos[1] / config.GAME_HEIGHT)
+        # [39-42] Wall distances (left, right, top, bottom) - normalized
+        obs[39] = self.player.pos[0] / config.GAME_WIDTH  # Distance from left
+        obs[40] = 1.0 - (self.player.pos[0] / config.GAME_WIDTH)  # Distance from right
+        obs[41] = self.player.pos[1] / config.GAME_HEIGHT  # Distance from top
+        obs[42] = 1.0 - (
+            self.player.pos[1] / config.GAME_HEIGHT
+        )  # Distance from bottom
 
-        # [31] Enemy count
-        obs[31] = len([e for e in self.enemies if e.alive]) / \
-            config.SPAWNER_MAX_ENEMIES
+        # [43] Enemy count
+        obs[43] = len([e for e in self.enemies if e.alive]) / config.SPAWNER_MAX_ENEMIES
 
         return obs
 
     def _find_k_nearest_entities(self, entities, k=2):
         """Find k nearest entities, returns list padded with None if fewer exist."""
-        alive_entities = [(e, utils.distance(self.player.pos, e.pos))
-                          for e in entities if e.alive]
+        alive_entities = [
+            (e, utils.distance(self.player.pos, e.pos)) for e in entities if e.alive
+        ]
         alive_entities.sort(key=lambda x: x[1])
 
         result = [e for e, _ in alive_entities[:k]]
@@ -392,35 +457,57 @@ class ArenaEnv(gym.Env):
             result.append(None)
         return result
 
+    def _find_k_nearest_projectiles(self, k=5):
+        """Find k nearest enemy projectiles, returns list padded with None if fewer exist."""
+        enemy_projectiles = [
+            (p, utils.distance(self.player.pos, p.pos))
+            for p in self.projectiles
+            if p.alive and not p.is_player_projectile
+        ]
+        enemy_projectiles.sort(key=lambda x: x[1])
+
+        result = [p for p, _ in enemy_projectiles[:k]]
+        # Pad with None if fewer than k projectiles
+        while len(result) < k:
+            result.append(None)
+        return result
+
     def _get_projectile_threat_info(self):
         """Get info about threatening projectiles (enemy projectiles only)."""
         max_dist = math.sqrt(config.GAME_WIDTH**2 + config.GAME_HEIGHT**2)
-        enemy_projectiles = [p for p in self.projectiles
-                             if p.alive and not p.is_player_projectile]
+        enemy_projectiles = [
+            p for p in self.projectiles if p.alive and not p.is_player_projectile
+        ]
 
         if not enemy_projectiles:
             return max_dist, 0.5, 0  # Return max_dist, not inf
 
         # Find nearest
-        min_dist = float('inf')
+        min_dist = float("inf")
         nearest_angle = 0.5
         for proj in enemy_projectiles:
             dist = utils.distance(self.player.pos, proj.pos)
             if dist < min_dist:
                 min_dist = dist
                 nearest_angle = utils.normalize_angle(
-                    utils.relative_angle(self.player.rotation,
-                                         utils.angle_to_point(self.player.pos, proj.pos)))
+                    utils.relative_angle(
+                        self.player.rotation,
+                        utils.angle_to_point(self.player.pos, proj.pos),
+                    )
+                )
 
         # Count projectiles within danger radius
-        danger_count = sum(1 for p in enemy_projectiles
-                           if utils.distance(self.player.pos, p.pos) < config.PROJECTILE_DANGER_RADIUS)
+        danger_count = sum(
+            1
+            for p in enemy_projectiles
+            if utils.distance(self.player.pos, p.pos) < config.PROJECTILE_DANGER_RADIUS
+        )
 
         return min_dist, nearest_angle, danger_count
 
     def _find_nearest_entity(self, entities):
         """Find single nearest entity (kept for backward compatibility)."""
-        nearest, min_dist = None, float('inf')
+        nearest, min_dist = None, float("inf")
         for e in entities:
             if e.alive:
                 d = utils.distance(self.player.pos, e.pos)
@@ -440,7 +527,9 @@ class ArenaEnv(gym.Env):
             if not proj.alive or not proj.is_player_projectile:
                 continue
             for enemy in self.enemies:
-                if enemy.alive and utils.check_collision(proj.pos, proj.radius, enemy.pos, enemy.radius):
+                if enemy.alive and utils.check_collision(
+                    proj.pos, proj.radius, enemy.pos, enemy.radius
+                ):
                     enemy.take_damage(proj.damage)
                     proj.hit()
                     reward += float(config.REWARD_HIT_ENEMY)
@@ -452,7 +541,9 @@ class ArenaEnv(gym.Env):
             if not proj.alive:
                 continue
             for spawner in self.spawners:
-                if spawner.alive and utils.check_collision(proj.pos, proj.radius, spawner.pos, spawner.radius):
+                if spawner.alive and utils.check_collision(
+                    proj.pos, proj.radius, spawner.pos, spawner.radius
+                ):
                     spawner.take_damage(proj.damage)
                     proj.hit()
                     reward += float(config.REWARD_HIT_SPAWNER)
@@ -472,14 +563,22 @@ class ArenaEnv(gym.Env):
         for proj in self.projectiles:
             if not proj.alive or proj.is_player_projectile:
                 continue
-            if self.player.alive and utils.check_collision(proj.pos, proj.radius, self.player.pos, self.player.radius):
+            if self.player.alive and utils.check_collision(
+                proj.pos, proj.radius, self.player.pos, self.player.radius
+            ):
                 self.player.take_damage(proj.damage)
                 proj.hit()
                 reward += damage_penalty
 
         # Apply curriculum-scaled damage penalty for enemy collisions
         for enemy in self.enemies:
-            if enemy.alive and self.player.alive and utils.check_collision(enemy.pos, enemy.radius, self.player.pos, self.player.radius):
+            if (
+                enemy.alive
+                and self.player.alive
+                and utils.check_collision(
+                    enemy.pos, enemy.radius, self.player.pos, self.player.radius
+                )
+            ):
                 self.player.take_damage(config.ENEMY_DAMAGE)
                 enemy.take_damage(enemy.max_health)
                 reward += damage_penalty
@@ -499,27 +598,28 @@ class ArenaEnv(gym.Env):
         # Initialize tracking variables on first call or phase reset
         if self._prev_spawner_total_health is None:
             self._prev_spawner_total_health = sum(
-                s.health for s in self.spawners if s.alive)
+                s.health for s in self.spawners if s.alive
+            )
             self._prev_enemy_count = len([e for e in self.enemies if e.alive])
             self._prev_player_health = self.player.health
             return 0.0
 
         # Calculate damage dealt this step
-        current_spawner_health = sum(
-            s.health for s in self.spawners if s.alive)
+        current_spawner_health = sum(s.health for s in self.spawners if s.alive)
         spawner_damage = max(
-            0, self._prev_spawner_total_health - current_spawner_health)
+            0, self._prev_spawner_total_health - current_spawner_health
+        )
 
         # Enemy kills also count (they respawn, so count is more relevant than health)
         enemy_kills_this_step = self.enemies_destroyed_this_step
 
         # Total offensive progress
-        offensive_score = spawner_damage + \
-            (enemy_kills_this_step * config.ENEMY_HEALTH * 0.5)
+        offensive_score = spawner_damage + (
+            enemy_kills_this_step * config.ENEMY_HEALTH * 0.5
+        )
 
         # Damage taken this step
-        player_damage_taken = max(
-            0, self._prev_player_health - self.player.health)
+        player_damage_taken = max(0, self._prev_player_health - self.player.health)
 
         # Health preservation bonus (staying healthy is good)
         health_ratio = self.player.get_health_ratio()
@@ -527,8 +627,9 @@ class ArenaEnv(gym.Env):
         # Combat efficiency = offense weighted by defense
         # High health = full offensive value, low health = reduced value
         # Also penalize for getting hit this step
-        efficiency = (offensive_score * (0.5 + 0.5 * health_ratio)
-                      ) - (player_damage_taken * 0.8)
+        efficiency = (offensive_score * (0.5 + 0.5 * health_ratio)) - (
+            player_damage_taken * 0.8
+        )
 
         # Update trackers
         self._prev_spawner_total_health = current_spawner_health
@@ -546,15 +647,15 @@ class ArenaEnv(gym.Env):
 
     def _get_info(self):
         return {
-            'phase': self.current_phase,
-            'enemies_destroyed': self.enemies_destroyed_this_step,  # Incremental this step
-            'spawners_destroyed': self.spawners_destroyed_this_step,  # Incremental this step
-            'total_enemies_destroyed': self.enemies_destroyed,  # Cumulative episode total
-            'total_spawners_destroyed': self.spawners_destroyed,  # Cumulative episode total
-            'player_health': self.player.health,
-            'episode_reward': self.episode_reward,
-            'episode_steps': self.current_step,
-            'win': bool(self.win),
-            'win_step': self.win_step or -1,
-            'first_spawner_kill_step': self.first_spawner_kill_step or -1,
+            "phase": self.current_phase,
+            "enemies_destroyed": self.enemies_destroyed_this_step,  # Incremental this step
+            "spawners_destroyed": self.spawners_destroyed_this_step,  # Incremental this step
+            "total_enemies_destroyed": self.enemies_destroyed,  # Cumulative episode total
+            "total_spawners_destroyed": self.spawners_destroyed,  # Cumulative episode total
+            "player_health": self.player.health,
+            "episode_reward": self.episode_reward,
+            "episode_steps": self.current_step,
+            "win": bool(self.win),
+            "win_step": self.win_step or -1,
+            "first_spawner_kill_step": self.first_spawner_kill_step or -1,
         }

@@ -28,23 +28,29 @@ FPS = 60
 ACTION_SPACE_STYLE_1 = 5  # Rotation, Thrust, Shoot
 ACTION_SPACE_STYLE_2 = 6  # Directional (4), Shoot
 
-# Observation Space Layout (28 dims total):
-# [0-1]   Player position (x, y)
-# [2-3]   Player velocity (vx, vy)
-# [4]     Player rotation
+# Observation Space Layout (44 dims total) - Agent-Relative Coordinates:
+# [0]     Distance from arena center (normalized to max_dist)
+# [1]     Angle to arena center (normalized 0-1 from -π to π)
+# [2]     Velocity magnitude (speed, normalized to max velocity)
+# [3]     Velocity direction angle (absolute world angle, normalized 0-1)
+# [4]     Player rotation (normalized)
 # [5]     Player health ratio
 # [6]     Shoot cooldown ratio (0 = ready)
 # [7]     Current phase ratio
 # [8]     Spawners remaining ratio
 # [9]     Time remaining ratio
-# [10-12] Nearest enemy 1 (dist, angle, exists)
-# [13-15] Nearest enemy 2 (dist, angle, exists)
-# [16-19] Nearest spawner 1 (dist, angle, exists, health)
-# [20-23] Nearest spawner 2 (dist, angle, exists, health)
-# [24-26] Nearest projectile (dist, angle, count nearby)
-# [27-30] Wall distances (left, right, top, bottom)
-# [31]    Enemy count
-OBS_DIM = 32
+# [10-12] Nearest enemy 1 (dist, angle relative to player rotation, exists)
+# [13-15] Nearest enemy 2 (dist, angle relative to player rotation, exists)
+# [16-19] Nearest spawner 1 (dist, angle relative to player rotation, exists, health)
+# [20-23] Nearest spawner 2 (dist, angle relative to player rotation, exists, health)
+# [24-26] Nearest projectile 1 (dist, angle relative to player rotation, exists)
+# [27-29] Nearest projectile 2 (dist, angle relative to player rotation, exists)
+# [30-32] Nearest projectile 3 (dist, angle relative to player rotation, exists)
+# [33-35] Nearest projectile 4 (dist, angle relative to player rotation, exists)
+# [36-38] Nearest projectile 5 (dist, angle relative to player rotation, exists)
+# [39-42] Wall distances (left, right, top, bottom) - distance-based
+# [43]    Enemy count (normalized)
+OBS_DIM = 44
 
 # Threat detection
 PROJECTILE_DANGER_RADIUS = 150  # Radius to count nearby projectiles
@@ -66,13 +72,13 @@ COLOR_PANEL_BG = (20, 20, 40)
 COLOR_PANEL_BORDER = (100, 100, 150)
 
 # Model Output Visualization Colors
-COLOR_ACTION_BAR_HIGH = (50, 200, 100)    # Green - high probability
-COLOR_ACTION_BAR_LOW = (100, 100, 120)    # Dim - low probability
-COLOR_VALUE_POSITIVE = (100, 200, 255)    # Blue - positive value
-COLOR_VALUE_NEGATIVE = (255, 100, 100)    # Red - negative value
-COLOR_ACTION_SELECTED = (255, 255, 100)   # Yellow - selected action
-COLOR_ENTROPY_HIGH = (100, 255, 100)      # Green - high entropy (exploring)
-COLOR_ENTROPY_LOW = (255, 100, 100)       # Red - low entropy (confident)
+COLOR_ACTION_BAR_HIGH = (50, 200, 100)  # Green - high probability
+COLOR_ACTION_BAR_LOW = (100, 100, 120)  # Dim - low probability
+COLOR_VALUE_POSITIVE = (100, 200, 255)  # Blue - positive value
+COLOR_VALUE_NEGATIVE = (255, 100, 100)  # Red - negative value
+COLOR_ACTION_SELECTED = (255, 255, 100)  # Yellow - selected action
+COLOR_ENTROPY_HIGH = (100, 255, 100)  # Green - high entropy (exploring)
+COLOR_ENTROPY_LOW = (255, 100, 100)  # Red - low entropy (confident)
 
 # Entity Parameters
 PLAYER_RADIUS = 15
@@ -126,9 +132,9 @@ REWARD_SHOT_FIRED = 0.0
 REWARD_QUICK_SPAWNER_KILL = 50.0
 
 # Activity Penalties (discourage passive/corner-hiding play)
-PENALTY_INACTIVITY = -0.05          # Per-step penalty when not moving enough
-PENALTY_CORNER = -0.1               # Per-step penalty when too close to edges
-CORNER_MARGIN = 80                  # Distance from edge to be considered "in corner"
+PENALTY_INACTIVITY = -0.05  # Per-step penalty when not moving enough
+PENALTY_CORNER = -0.1  # Per-step penalty when too close to edges
+CORNER_MARGIN = 80  # Distance from edge to be considered "in corner"
 INACTIVITY_VELOCITY_THRESHOLD = 0.5  # Minimum velocity magnitude to be "active"
 
 # Reward Shaping
@@ -139,8 +145,8 @@ SHAPING_CLIP = 0.2
 # Curriculum Learning
 CURRICULUM_ENABLED = True
 CURRICULUM_ADVANCEMENT_THRESHOLD = 1  # Spawner kill rate to advance
-CURRICULUM_MIN_EPISODES = 100            # Min episodes before advancing
-CURRICULUM_WINDOW = 100                 # Episodes for averaging
+CURRICULUM_MIN_EPISODES = 100  # Min episodes before advancing
+CURRICULUM_WINDOW = 100  # Episodes for averaging
 
 # Parallel Environments
 NUM_ENVS_DEFAULT_MPS = 20
@@ -153,7 +159,7 @@ CHECKPOINT_FREQ = 10_000
 
 # Legacy paths (for backward compatibility with old models)
 TENSORBOARD_LOG_DIR = "./logs"  # Deprecated: kept for reference only
-MODEL_SAVE_DIR = "./models"      # Deprecated: kept for reference only
+MODEL_SAVE_DIR = "./models"  # Deprecated: kept for reference only
 
 # ============================================================================
 # STRUCTURED CONFIGURATIONS
@@ -163,6 +169,7 @@ MODEL_SAVE_DIR = "./models"      # Deprecated: kept for reference only
 @dataclass
 class TrainerConfig:
     """Configuration for the training run."""
+
     algo: str
     style: int
     total_timesteps: int = 100_000
@@ -179,9 +186,9 @@ class TrainerConfig:
     # Whether to reset timesteps in SB3 learn(); when resuming, typically False
     reset_num_timesteps: bool = True
     # Transfer learning fine-grained control
-    load_vecnormalize: bool = True   # Load VecNormalize stats if available
-    load_curriculum: bool = True      # Restore curriculum progress
-    load_replay_buffer: bool = True   # Load replay buffer (DQN only)
+    load_vecnormalize: bool = True  # Load VecNormalize stats if available
+    load_curriculum: bool = True  # Restore curriculum progress
+    load_replay_buffer: bool = True  # Load replay buffer (DQN only)
 
     # Learning rate schedule
     lr_schedule: str = "cosine"  # "constant", "linear", "exponential", "cosine"
@@ -190,13 +197,13 @@ class TrainerConfig:
     lr_warmup_fraction: float = 0.0
 
     # DQN specific
-    dqn_hidden_layers: List[int] = field(
-        default_factory=lambda: [256, 128, 64])
+    dqn_hidden_layers: List[int] = field(default_factory=lambda: [256, 128, 64])
     dqn_activation: str = "SiLU"
 
     # PPO specific
     ppo_net_arch: Dict[str, List[int]] = field(
-        default_factory=lambda: dict(pi=[256, 128, 64], vf=[256, 128, 64]))
+        default_factory=lambda: dict(pi=[128, 64, 32], vf=[128, 64, 32])
+    )
     ppo_activation: str = "SiLU"
 
     # LSTM specific
@@ -205,8 +212,11 @@ class TrainerConfig:
     ppo_lstm_n_layers: int = 1
 
     # A2C specific
-    a2c_net_arch: Dict[str, List[int]] = field(default_factory=lambda: dict(
-        pi=[384, 256, 256, 128, 64], vf=[256, 128, 128, 64]))
+    a2c_net_arch: Dict[str, List[int]] = field(
+        default_factory=lambda: dict(
+            pi=[384, 256, 256, 128, 64], vf=[256, 128, 128, 64]
+        )
+    )
     a2c_activation: str = "SiLU"
 
 
@@ -276,10 +286,7 @@ class PPOLSTMHyperparams(PPOHyperparams):
 # Default hyperparameter instances (equivalent to old config)
 DQN_DEFAULT = DQNHyperparams()
 DQN_GPU_DEFAULT = DQNHyperparams(
-    buffer_size=200_000,
-    batch_size=256,
-    gradient_steps=2,
-    learning_starts=2000
+    buffer_size=200_000, batch_size=256, gradient_steps=2, learning_starts=2000
 )
 
 PPO_DEFAULT = PPOHyperparams()
