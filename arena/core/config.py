@@ -110,10 +110,10 @@ PROJECTILE_LIFETIME = 120
 # Phase System
 PHASE_CONFIG = [
     {"spawners": 1, "enemy_speed_mult": 1.0, "spawn_rate_mult": 1.0},
-    {"spawners": 2, "enemy_speed_mult": 0.9, "spawn_rate_mult": 0.9},
-    {"spawners": 3, "enemy_speed_mult": 0.8, "spawn_rate_mult": 0.85},
-    {"spawners": 4, "enemy_speed_mult": 0.7, "spawn_rate_mult": 0.8},
-    {"spawners": 5, "enemy_speed_mult": 0.75, "spawn_rate_mult": 0.75},
+    {"spawners": 1, "enemy_speed_mult": 0.9, "spawn_rate_mult": 0.9},
+    {"spawners": 1, "enemy_speed_mult": 0.8, "spawn_rate_mult": 0.85},
+    {"spawners": 1, "enemy_speed_mult": 0.7, "spawn_rate_mult": 0.8},
+    {"spawners": 2, "enemy_speed_mult": 0.75, "spawn_rate_mult": 0.75},
 ]
 MAX_PHASES = len(PHASE_CONFIG)
 
@@ -126,9 +126,9 @@ REWARD_PHASE_COMPLETE = 100.0
 REWARD_DAMAGE_TAKEN = -2.0
 REWARD_DEATH = -100.0
 REWARD_STEP_SURVIVAL = -0.1
-REWARD_HIT_ENEMY = 2.0
-REWARD_HIT_SPAWNER = 10.0
-REWARD_SHOT_FIRED = 0.0
+REWARD_HIT_ENEMY = 3.0 
+REWARD_HIT_SPAWNER = 15.0 
+REWARD_SHOT_FIRED = -0.01  # Small cost to prevent spam (was 0.0)
 REWARD_QUICK_SPAWNER_KILL = 50.0
 
 # Activity Penalties (discourage passive/corner-hiding play)
@@ -138,14 +138,12 @@ CORNER_MARGIN = 80  # Distance from edge to be considered "in corner"
 INACTIVITY_VELOCITY_THRESHOLD = 0.5  # Minimum velocity magnitude to be "active"
 
 # Reward Shaping
-SHAPING_MODE = "delta"  # Simpler selection
+SHAPING_MODE = "delta"
 SHAPING_SCALE = 1.0
 SHAPING_CLIP = 0.2
 
 # Curriculum Learning
 CURRICULUM_ENABLED = True
-CURRICULUM_ADVANCEMENT_THRESHOLD = 1  # Spawner kill rate to advance
-CURRICULUM_MIN_EPISODES = 100  # Min episodes before advancing
 CURRICULUM_WINDOW = 100  # Episodes for averaging
 
 # Parallel Environments
@@ -245,7 +243,7 @@ class PPOHyperparams:
     gamma: float = 0.99
     gae_lambda: float = 0.95
     clip_range: float = 0.1
-    ent_coef: float = 0.05
+    ent_coef: float = 0.05 
     vf_coef: float = 1.0
     max_grad_norm: float = 0.5
     target_kl: float = 0.03
