@@ -125,7 +125,7 @@ REWARD_SPAWNER_DESTROYED = 75.0
 REWARD_PHASE_COMPLETE = 100.0
 REWARD_DAMAGE_TAKEN = -2.0
 REWARD_DEATH = -100.0
-REWARD_STEP_SURVIVAL = 0.01
+REWARD_STEP_SURVIVAL = -0.1
 REWARD_HIT_ENEMY = 2.0
 REWARD_HIT_SPAWNER = 10.0
 REWARD_SHOT_FIRED = 0.0
@@ -238,7 +238,7 @@ class DQNHyperparams:
 
 @dataclass
 class PPOHyperparams:
-    learning_rate: float = 1e-4
+    learning_rate: float = 5e-4
     n_steps: int = 4096
     batch_size: int = 64
     n_epochs: int = 10
