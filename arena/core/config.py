@@ -139,6 +139,8 @@ REWARD_STYLE2_ALIGNMENT_BONUS = 1 # Extra reward for Style 2 alignment
 PENALTY_INACTIVITY = 0          # Per-step penalty when not moving enough
 PENALTY_CORNER = -0.1               # Per-step penalty when too close to edges
 CORNER_MARGIN = 80                  # Distance from edge to be considered "in corner"
+PENALTY_WALL_PROXIMITY = -0.1       # Penalty for being too close to walls
+WALL_MARGIN = 50                    # Distance from wall to trigger penalty
 INACTIVITY_VELOCITY_THRESHOLD = 0.5  # Minimum velocity magnitude to be "active"
 
 # Reward Shaping

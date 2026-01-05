@@ -569,6 +569,13 @@ class ArenaEnv(gym.Env):
         # Normalize and scale
         reward = efficiency * shaping_scale * 0.01 + approach_reward
 
+        # Wall Proximity Penalty
+        x, y = self.player.pos
+        margin = config.WALL_MARGIN
+        if x < margin or x > config.GAME_WIDTH - margin or \
+           y < margin or y > config.GAME_HEIGHT - margin:
+            reward += config.PENALTY_WALL_PROXIMITY
+
         # Aiming Reward: Bonus for pointing at enemies/spawners
         aiming_reward = 0.0
         targets = [e for e in self.enemies if e.alive] + [s for s in self.spawners if s.alive]
