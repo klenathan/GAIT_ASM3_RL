@@ -98,12 +98,15 @@ class Evaluator:
         model_dir = os.path.dirname(model_path)
         model_name = os.path.basename(model_path).replace('.zip', '')
 
+        # Extract step count from model name
+        step_match = re.search(r'_(\d+)_steps', model_name)
+        model_steps = int(step_match.group(1)) if step_match else None
+
         # Extract run prefix based on model name format
         # Format: {algo}_style{N}_{YYYYMMDD}_{HHMMSS}[_NUMBERS_steps or _final]
         run_prefix = None
 
         # Try to extract step count to get prefix before it
-        step_match = re.search(r'_(\d+)_steps', model_name)
         if step_match:
             run_prefix = model_name[:step_match.start()]
         elif model_name.endswith('_final'):
@@ -130,15 +133,32 @@ class Evaluator:
                 if os.path.exists(checkpoints_dir):
                     pattern = os.path.join(
                         checkpoints_dir, f"{run_prefix}_vecnormalize*.pkl")
-                    matches = sorted(glob.glob(pattern), reverse=True)
+                    matches = glob.glob(pattern)
                     if matches:
-                        return matches[0]
+                        return self._sort_by_steps(matches)[0]
 
+            # If we know the step count, look for exact match first
+            if model_steps:
+                exact_pattern = os.path.join(model_dir, f"{run_prefix}_vecnormalize_{model_steps}_steps.pkl")
+                if os.path.exists(exact_pattern):
+                    return exact_pattern
+
+                # Search in parent directory structure for exact match
+                parent_dir = os.path.dirname(model_dir)
+                for subdir in ['checkpoints', 'final', '.']:
+                    search_dir = os.path.join(parent_dir, subdir) if subdir != '.' else parent_dir
+                    exact_pattern = os.path.join(search_dir, f"{run_prefix}_vecnormalize_{model_steps}_steps.pkl")
+                    if os.path.exists(exact_pattern):
+                        return exact_pattern
+
+            # Fallback: find all matching vecnormalize files and pick closest <= model_steps
             pattern = os.path.join(
                 model_dir, f"{run_prefix}_vecnormalize*.pkl")
-            matches = sorted(glob.glob(pattern), reverse=True)  # Latest first
-            if matches:
-                return matches[0]
+            matches = glob.glob(pattern)
+            if matches and model_steps:
+                return self._find_closest_vecnormalize(matches, model_steps)
+            elif matches:
+                return self._sort_by_steps(matches)[0]
 
             # Try in parent directory (for new unified structure where checkpoints/ and final/ are separate)
             parent_dir = os.path.dirname(model_dir)
@@ -147,14 +167,52 @@ class Evaluator:
                     parent_dir, subdir) if subdir != '.' else parent_dir
                 pattern = os.path.join(
                     search_dir, f"{run_prefix}_vecnormalize*.pkl")
-                matches = sorted(glob.glob(pattern), reverse=True)
-                if matches:
-                    return matches[0]
+                matches = glob.glob(pattern)
+                if matches and model_steps:
+                    return self._find_closest_vecnormalize(matches, model_steps)
+                elif matches:
+                    return self._sort_by_steps(matches)[0]
 
         # Fallback: find any vecnormalize file in the same directory
         pattern = os.path.join(model_dir, "*vecnormalize*.pkl")
-        matches = sorted(glob.glob(pattern), reverse=True)
-        return matches[0] if matches else None
+        matches = glob.glob(pattern)
+        if matches and model_steps:
+            return self._find_closest_vecnormalize(matches, model_steps)
+        return self._sort_by_steps(matches)[0] if matches else None
+
+    def _find_closest_vecnormalize(self, file_paths: list, target_steps: int) -> str:
+        """Find VecNormalize file with step count closest to (and <= if possible) target_steps."""
+        import re
+
+        def extract_steps(path: str) -> int:
+            match = re.search(r'_(\d+)_steps', path)
+            return int(match.group(1)) if match else 0
+
+        # First, try to find exact match
+        for path in file_paths:
+            if extract_steps(path) == target_steps:
+                return path
+
+        # Otherwise, find closest (prefer <= target, but allow > if no <= exists)
+        files_with_steps = [(path, extract_steps(path)) for path in file_paths]
+        files_lte = [(p, s) for p, s in files_with_steps if s <= target_steps]
+
+        if files_lte:
+            # Pick highest step count that's <= target
+            return max(files_lte, key=lambda x: x[1])[0]
+        else:
+            # No files <= target, pick the smallest one > target
+            return min(files_with_steps, key=lambda x: x[1])[0]
+
+    def _sort_by_steps(self, file_paths: list) -> list:
+        """Sort file paths by step count (numerically, descending)."""
+        import re
+
+        def extract_steps(path: str) -> int:
+            match = re.search(r'_(\d+)_steps', path)
+            return int(match.group(1)) if match else 0
+
+        return sorted(file_paths, key=extract_steps, reverse=True)
 
     def run_session(self, model_path: str, style: int, deterministic: bool = True,
                     curriculum_stage: int = None, auto_curriculum: bool = False):
@@ -191,14 +249,14 @@ class Evaluator:
             print(f"✓ Using curriculum stage {effective_curriculum_stage}: {curriculum_manager.current_stage.name}")
 
         # Create base environment - use ArenaDictEnv for ppo_dict, ArenaCNNEnv for ppo_cnn, ArenaEnv for others
+        # Set render_mode="human" to enable audio during model play
         if self.current_algo == "ppo_dict":
-            base_env = ArenaDictEnv(control_style=style, render_mode=None)
+            base_env = ArenaDictEnv(control_style=style, render_mode="human")
         elif self.current_algo == "ppo_cnn":
-            base_env = ArenaCNNEnv(control_style=style, render_mode=None)
+            base_env = ArenaCNNEnv(control_style=style, render_mode="human")
         else:
-            base_env = ArenaEnv(control_style=style, render_mode=None,
+            base_env = ArenaEnv(control_style=style, render_mode="human",
                                curriculum_manager=curriculum_manager)
-        base_env.render_mode = "human"
         base_env.renderer = self.renderer
         base_env._owns_renderer = False
 
@@ -248,6 +306,9 @@ class Evaluator:
                         self.renderer.show_vision = not self.renderer.show_vision
                     if event.key == pygame.K_d:
                         self.renderer.show_debug = not self.renderer.show_debug
+                # Handle scroll events for metrics panel
+                if event.type == pygame.MOUSEWHEEL:
+                    self.renderer.handle_scroll(event)
 
             # Save LSTM states before predict (for proper extraction)
             lstm_states_for_extraction = lstm_states if self.is_recurrent else None
@@ -295,6 +356,24 @@ class Evaluator:
 
             # Handle episode reset for recurrent models
             if dones[0]:
+                # Check for victory condition
+                info = infos[0]
+                if info.get('win', False):
+                    # Show victory screen
+                    underlying_env = self.env.envs[0] if hasattr(self.env, 'envs') else self.env.venv.envs[0]
+                    self.renderer.draw_victory_screen(
+                        info['win_step'],
+                        info.get('episode_reward', rewards[0]),
+                        underlying_env.current_phase
+                    )
+                    pygame.display.flip()
+                    # Wait for user input
+                    result = self._wait_for_continue()
+                    if result == "menu":
+                        return "menu"
+                    elif result == "quit":
+                        return "quit"
+                
                 obs = self.env.reset()
                 if isinstance(obs, tuple):
                     obs = obs[0]
@@ -311,6 +390,21 @@ class Evaluator:
                 self.env.venv.envs[0].render()
 
         return "menu"
+
+    def _wait_for_continue(self):
+        """Wait for user to press SPACE to continue or ESC to return to menu."""
+        waiting = True
+        while waiting:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    return "quit"
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_SPACE:
+                        return "continue"
+                    if event.key == pygame.K_ESCAPE:
+                        return "menu"
+            self.renderer.clock.tick(30)  # Lower framerate while waiting
+        return "continue"
 
     def run_human_session(self, style: int):
         """Run a manual gameplay session."""
@@ -350,6 +444,9 @@ class Evaluator:
                         self.renderer.show_vision = not self.renderer.show_vision
                     if event.key == pygame.K_d:
                         self.renderer.show_debug = not self.renderer.show_debug
+                # Handle scroll events for metrics panel
+                if event.type == pygame.MOUSEWHEEL:
+                    self.renderer.handle_scroll(event)
 
             # Get action from human controller
             action = controller.get_action(events)
@@ -363,6 +460,24 @@ class Evaluator:
             self.renderer.set_model_output(None, style)
 
             if terminated or truncated:
+                # Check for victory condition
+                if info.get('win', False):
+                    # Render current game state first
+                    self.renderer.render(self.env, training_metrics=metrics)
+                    # Show victory screen
+                    self.renderer.draw_victory_screen(
+                        info['win_step'],
+                        metrics['episode_reward'],
+                        self.env.current_phase
+                    )
+                    pygame.display.flip()
+                    # Wait for user input
+                    result = self._wait_for_continue()
+                    if result == "menu":
+                        return "menu"
+                    elif result == "quit":
+                        return "quit"
+                
                 obs, _ = self.env.reset()
                 metrics['episode'] += 1
                 metrics['episode_reward'] = 0.0

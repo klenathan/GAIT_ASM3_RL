@@ -4,6 +4,7 @@ Main environment implementing the Gym API with dual control schemes.
 """
 
 from arena.ui.renderer import ArenaRenderer
+from arena.audio.sound_manager import SoundManager
 from arena.game.entities import Player, Enemy, Spawner, Projectile
 from arena.game import utils
 from arena.core.curriculum import CurriculumManager, CurriculumStage
@@ -52,6 +53,14 @@ class ArenaEnv(gym.Env):
         if render_mode == "human":
             self.renderer = ArenaRenderer()
             self._owns_renderer = True
+
+        # Initialize sound manager (enabled only in human mode by default)
+        enable_audio = render_mode == "human" and config.AUDIO_ENABLED
+        self.sound_manager = SoundManager(
+            enabled=enable_audio,
+            sound_dir=config.AUDIO_SOUND_DIR,
+            volume=config.AUDIO_VOLUME_MASTER
+        )
 
         self.player = None
         self.enemies = []
@@ -138,6 +147,7 @@ class ArenaEnv(gym.Env):
                 proj = Projectile(self.player.pos[0], self.player.pos[1],
                                   self.player.rotation, is_player_projectile=True)
                 self.projectiles.append(proj)
+                self.sound_manager.play('player_shoot', volume_multiplier=0.5)
 
         for enemy in self.enemies:
             if enemy.alive:
@@ -146,6 +156,7 @@ class ArenaEnv(gym.Env):
                     angle = utils.angle_to_point(enemy.pos, self.player.pos)
                     self.projectiles.append(Projectile(
                         enemy.pos[0], enemy.pos[1], angle, False))
+                    self.sound_manager.play('enemy_shoot', volume_multiplier=0.4)
 
         phase_cfg = config.PHASE_CONFIG[self.current_phase]
 
@@ -165,6 +176,7 @@ class ArenaEnv(gym.Env):
                         self.np_random, enemy_speed, existing_enemies=self.enemies)
                     if new_enemy:
                         self.enemies.append(new_enemy)
+                        self.sound_manager.play('enemy_spawn', volume_multiplier=0.6)
 
         for proj in self.projectiles:
             if proj.alive:
@@ -180,16 +192,19 @@ class ArenaEnv(gym.Env):
 
         if len(self.spawners) == 0:
             reward += config.REWARD_PHASE_COMPLETE
+            self.sound_manager.play('phase_complete')
             self.current_phase += 1
             if self.current_phase < config.MAX_PHASES:
                 self._init_phase()
             else:
                 self.win = True
                 self.win_step = self.current_step
+                self.sound_manager.play('victory')
                 done = True
 
         if not self.player.alive:
             reward += config.REWARD_DEATH
+            self.sound_manager.play('player_death')
             done = True
 
         if self.current_step >= config.MAX_STEPS:
@@ -225,6 +240,8 @@ class ArenaEnv(gym.Env):
             self.renderer.close()
         self.renderer = None
         self._owns_renderer = False
+        if self.sound_manager:
+            self.sound_manager.cleanup()
 
     def _init_phase(self):
         phase_cfg = config.PHASE_CONFIG[self.current_phase]
@@ -442,10 +459,12 @@ class ArenaEnv(gym.Env):
                     enemy.take_damage(proj.damage)
                     proj.hit()
                     reward += float(config.REWARD_HIT_ENEMY)
+                    self.sound_manager.play('enemy_hit', volume_multiplier=0.5)
                     if not enemy.alive:
                         reward += config.REWARD_ENEMY_DESTROYED
                         self.enemies_destroyed += 1
                         self.enemies_destroyed_this_step += 1
+                        self.sound_manager.play('enemy_destroyed', volume_multiplier=0.7)
                     break
             if not proj.alive:
                 continue
@@ -454,12 +473,15 @@ class ArenaEnv(gym.Env):
                     spawner.take_damage(proj.damage)
                     proj.hit()
                     reward += float(config.REWARD_HIT_SPAWNER)
+                    self.sound_manager.play('spawner_hit', volume_multiplier=0.6)
                     if not spawner.alive:
                         reward += config.REWARD_SPAWNER_DESTROYED
                         self.spawners_destroyed += 1
                         self.spawners_destroyed_this_step += 1
                         # Heal player 50% when spawner is destroyed
                         self.player.heal(0.5)
+                        self.sound_manager.play('spawner_destroyed', volume_multiplier=0.8)
+                        self.sound_manager.play('heal', volume_multiplier=0.5)
                         if self.first_spawner_kill_step is None:
                             self.first_spawner_kill_step = self.current_step
                         if (self.current_step - self.phase_start_step) < 500:
@@ -474,6 +496,7 @@ class ArenaEnv(gym.Env):
                 self.player.take_damage(proj.damage)
                 proj.hit()
                 reward += damage_penalty
+                self.sound_manager.play('player_hit', volume_multiplier=0.7)
 
         # Apply curriculum-scaled damage penalty for enemy collisions
         for enemy in self.enemies:
@@ -481,6 +504,7 @@ class ArenaEnv(gym.Env):
                 self.player.take_damage(config.ENEMY_DAMAGE)
                 enemy.take_damage(enemy.max_health)
                 reward += damage_penalty
+                self.sound_manager.play('player_hit', volume_multiplier=0.8)
                 if not enemy.alive:
                     self.enemies_destroyed += 1
                     self.enemies_destroyed_this_step += 1

@@ -21,6 +21,7 @@ class Player:
         self.radius = config.PLAYER_RADIUS
         self.shoot_cooldown = 0
         self.alive = True
+        self.damage_flash_timer = 0  # Timer for red damage flash effect
 
     def update_style_1(self, action):
         """Update with rotation/thrust controls."""
@@ -45,6 +46,9 @@ class Player:
 
         if self.shoot_cooldown > 0:
             self.shoot_cooldown -= 1
+        
+        if self.damage_flash_timer > 0:
+            self.damage_flash_timer -= 1
 
     def update_style_2(self, action):
         """Update with directional movement controls."""
@@ -69,6 +73,9 @@ class Player:
 
         if self.shoot_cooldown > 0:
             self.shoot_cooldown -= 1
+        
+        if self.damage_flash_timer > 0:
+            self.damage_flash_timer -= 1
 
     def shoot(self):
         """Attempt to shoot."""
@@ -80,6 +87,7 @@ class Player:
     def take_damage(self, amount):
         """Handle taking damage."""
         self.health -= amount
+        self.damage_flash_timer = 15  # Flash red for 15 frames (~0.25 seconds at 60 FPS)
         if self.health <= 0:
             self.health = 0
             self.alive = False

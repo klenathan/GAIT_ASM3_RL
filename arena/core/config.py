@@ -109,9 +109,9 @@ PROJECTILE_LIFETIME = 120
 PHASE_CONFIG = [
     {"spawners": 1, "enemy_speed_mult": 1.0, "spawn_rate_mult": 0.8},
     {"spawners": 1, "enemy_speed_mult": 0.9, "spawn_rate_mult": 0.9},
-    {"spawners": 2, "enemy_speed_mult": 0.8, "spawn_rate_mult": 0.3},
-    {"spawners": 3, "enemy_speed_mult": 0.7, "spawn_rate_mult": 0.2},
-    {"spawners": 4, "enemy_speed_mult": 0.75, "spawn_rate_mult": 0.1},
+    {"spawners": 1, "enemy_speed_mult": 0.8, "spawn_rate_mult": 0.3},
+    {"spawners": 2, "enemy_speed_mult": 0.6, "spawn_rate_mult": 0.2},
+    {"spawners": 3, "enemy_speed_mult": 0.5, "spawn_rate_mult": 0.1},
 ]
 MAX_PHASES = len(PHASE_CONFIG)
 
@@ -293,3 +293,11 @@ PPO_LSTM_GPU_DEFAULT = PPOLSTMHyperparams(batch_size=64)
 
 A2C_DEFAULT = A2CHyperparams()
 A2C_GPU_DEFAULT = A2CHyperparams(n_steps=256)
+
+# ============================================================================
+# AUDIO SETTINGS
+# ============================================================================
+
+AUDIO_ENABLED = True  # Master switch for audio (disable for headless training)
+AUDIO_VOLUME_MASTER = 0.7  # Master volume (0.0 to 1.0)
+AUDIO_SOUND_DIR = "arena/sound"  # Directory containing sound files

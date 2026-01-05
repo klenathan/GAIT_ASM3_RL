@@ -161,12 +161,15 @@ class BaseTrainer(ABC):
         model_dir = os.path.dirname(model_path)
         model_name = os.path.basename(model_path).replace('.zip', '')
         
+        # Extract step count from model name
+        step_match = re.search(r'_(\d+)_steps', model_name)
+        model_steps = int(step_match.group(1)) if step_match else None
+        
         # Extract run prefix based on model name format
         # Format: {algo}_style{N}_{YYYYMMDD}_{HHMMSS}[_NUMBERS_steps or _final]
         run_prefix = None
         
         # Try to extract step count to get prefix before it
-        step_match = re.search(r'_(\d+)_steps', model_name)
         if step_match:
             run_prefix = model_name[:step_match.start()]
         elif model_name.endswith('_final'):
@@ -191,28 +194,83 @@ class BaseTrainer(ABC):
                 checkpoints_dir = os.path.join(parent_dir, 'checkpoints')
                 if os.path.exists(checkpoints_dir):
                     pattern = os.path.join(checkpoints_dir, f"{run_prefix}_vecnormalize*.pkl")
-                    matches = sorted(glob.glob(pattern), reverse=True)
+                    matches = glob.glob(pattern)
                     if matches:
-                        return matches[0]
+                        return self._sort_by_steps(matches)[0]
             
+            # If we know the step count, look for exact match first
+            if model_steps:
+                exact_pattern = os.path.join(model_dir, f"{run_prefix}_vecnormalize_{model_steps}_steps.pkl")
+                if os.path.exists(exact_pattern):
+                    return exact_pattern
+                
+                # Search in parent directory structure for exact match
+                parent_dir = os.path.dirname(model_dir)
+                for subdir in ['checkpoints', 'final', '.']:
+                    search_dir = os.path.join(parent_dir, subdir) if subdir != '.' else parent_dir
+                    exact_pattern = os.path.join(search_dir, f"{run_prefix}_vecnormalize_{model_steps}_steps.pkl")
+                    if os.path.exists(exact_pattern):
+                        return exact_pattern
+            
+            # Fallback: find all matching vecnormalize files and pick closest <= model_steps
             pattern = os.path.join(model_dir, f"{run_prefix}_vecnormalize*.pkl")
-            matches = sorted(glob.glob(pattern), reverse=True)  # Latest first
-            if matches:
-                return matches[0]
+            matches = glob.glob(pattern)
+            if matches and model_steps:
+                return self._find_closest_vecnormalize(matches, model_steps)
+            elif matches:
+                return self._sort_by_steps(matches)[0]
             
             # Try in parent directory (for new unified structure where checkpoints/ and final/ are separate)
             parent_dir = os.path.dirname(model_dir)
             for subdir in ['checkpoints', 'final', '.']:
                 search_dir = os.path.join(parent_dir, subdir) if subdir != '.' else parent_dir
                 pattern = os.path.join(search_dir, f"{run_prefix}_vecnormalize*.pkl")
-                matches = sorted(glob.glob(pattern), reverse=True)
-                if matches:
-                    return matches[0]
+                matches = glob.glob(pattern)
+                if matches and model_steps:
+                    return self._find_closest_vecnormalize(matches, model_steps)
+                elif matches:
+                    return self._sort_by_steps(matches)[0]
         
         # Fallback: find any vecnormalize file in the same directory
         pattern = os.path.join(model_dir, "*vecnormalize*.pkl")
-        matches = sorted(glob.glob(pattern), reverse=True)
-        return matches[0] if matches else None
+        matches = glob.glob(pattern)
+        if matches and model_steps:
+            return self._find_closest_vecnormalize(matches, model_steps)
+        return self._sort_by_steps(matches)[0] if matches else None
+    
+    def _find_closest_vecnormalize(self, file_paths: list, target_steps: int) -> str:
+        """Find VecNormalize file with step count closest to (and <= if possible) target_steps."""
+        import re
+        
+        def extract_steps(path: str) -> int:
+            match = re.search(r'_(\d+)_steps', path)
+            return int(match.group(1)) if match else 0
+        
+        # First, try to find exact match
+        for path in file_paths:
+            if extract_steps(path) == target_steps:
+                return path
+        
+        # Otherwise, find closest (prefer <= target, but allow > if no <= exists)
+        files_with_steps = [(path, extract_steps(path)) for path in file_paths]
+        files_lte = [(p, s) for p, s in files_with_steps if s <= target_steps]
+        
+        if files_lte:
+            # Pick highest step count that's <= target
+            return max(files_lte, key=lambda x: x[1])[0]
+        else:
+            # No files <= target, pick the smallest one > target
+            return min(files_with_steps, key=lambda x: x[1])[0]
+    
+    def _sort_by_steps(self, file_paths: list) -> list:
+        """Sort file paths by step count (numerically, descending)."""
+        import re
+        
+        def extract_steps(path: str) -> int:
+            match = re.search(r'_(\d+)_steps', path)
+            return int(match.group(1)) if match else 0
+        
+        return sorted(file_paths, key=extract_steps, reverse=True)
     
     def _load_pretrained_model(
         self,

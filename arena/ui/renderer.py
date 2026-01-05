@@ -46,6 +46,10 @@ class ArenaRenderer:
         # Metrics panel position
         self.panel_x = config.WINDOW_GAME_WIDTH + 10
         self.panel_width = config.SIDEBAR_WIDTH - 20
+        
+        # Scrolling for metrics panel
+        self.scroll_offset = 0
+        self.max_scroll = 0
 
         self.model_output = None
         self.control_style = 1
@@ -123,7 +127,17 @@ class ArenaRenderer:
         scaled_radius = player.radius * config.RENDER_SCALE
         points = self._get_ship_points(
             scaled_pos, player.rotation, scaled_radius)
-        pygame.draw.polygon(self.screen, config.COLOR_PLAYER, points)
+        
+        # Apply red hue when damage is taken
+        color = config.COLOR_PLAYER
+        if hasattr(player, 'damage_flash_timer') and player.damage_flash_timer > 0:
+            # Blend player color with red based on flash intensity
+            flash_intensity = player.damage_flash_timer / 15.0
+            red_overlay = (255, 50, 50)
+            color = tuple(int(c * (1 - flash_intensity * 0.7) + r * flash_intensity * 0.7) 
+                         for c, r in zip(config.COLOR_PLAYER, red_overlay))
+        
+        pygame.draw.polygon(self.screen, color, points)
         pygame.draw.polygon(self.screen, (255, 255, 255), points, 2)
 
         self._draw_health_bar(player.pos, player.radius,
@@ -206,135 +220,216 @@ class ArenaRenderer:
         section_gap = 6
 
         available_width = self.panel_width
+        panel_height = config.SCREEN_HEIGHT - 30
 
-        # Panel background
-        panel_rect = pygame.Rect(
-            x - 5, y - 5, available_width, config.SCREEN_HEIGHT - 30)
+        # Panel background and border
+        panel_rect = pygame.Rect(x - 5, y - 5, available_width, panel_height)
         pygame.draw.rect(self.screen, config.COLOR_PANEL_BG, panel_rect)
         pygame.draw.rect(self.screen, config.COLOR_PANEL_BORDER, panel_rect, 2)
+
+        # Create a temporary surface for all metrics content
+        # Make it tall enough to hold all content
+        temp_surface = pygame.Surface((available_width - 10, 2000), pygame.SRCALPHA)
+        temp_surface.fill((0, 0, 0, 0))  # Transparent background
+        
+        # Draw all content to temporary surface with relative coordinates
+        content_y = 0
 
         # Title
         title_text = "Training Metrics" if not is_human else "Human Gameplay"
         title = self.title_font.render(
             title_text, True, (255, 255, 255) if is_human else config.COLOR_TEXT)
-        self.screen.blit(title, (x + 10, y))
+        temp_surface.blit(title, (10, content_y))
 
         if is_human:
             human_label = self.small_font.render(
                 "PLAYER CONTROLLED", True, (100, 200, 255))
-            self.screen.blit(human_label, (x + 10, y + 20))
-            y += 40
+            temp_surface.blit(human_label, (10, content_y + 20))
+            content_y += 40
         else:
-            y += 32
+            content_y += 32
 
         # ═══ SESSION SECTION ═══
-        y = self._draw_section_header(x, y, "SESSION", available_width)
-        self._draw_metric_row(x, y, "Episode", metrics.get(
+        content_y = self._draw_section_header_to_surface(temp_surface, 0, content_y, "SESSION", available_width)
+        self._draw_metric_row_to_surface(temp_surface, 0, content_y, "Episode", metrics.get(
             'episode', 0), available_width)
-        y += line_height
-        self._draw_metric_row(x, y, "Step", env.current_step, available_width)
-        y += line_height
-        self._draw_metric_row(
-            x, y, "Phase", f"{env.current_phase + 1}/{config.MAX_PHASES}", available_width)
-        y += line_height + section_gap
+        content_y += line_height
+        self._draw_metric_row_to_surface(temp_surface, 0, content_y, "Step", env.current_step, available_width)
+        content_y += line_height
+        self._draw_metric_row_to_surface(
+            temp_surface, 0, content_y, "Phase", f"{env.current_phase + 1}/{config.MAX_PHASES}", available_width)
+        content_y += line_height + section_gap
 
         # ═══ REWARDS SECTION ═══
-        y = self._draw_section_header(x, y, "REWARDS", available_width)
+        content_y = self._draw_section_header_to_surface(temp_surface, 0, content_y, "REWARDS", available_width)
         ep_reward = metrics.get('episode_reward', 0)
         reward_color = (100, 255, 100) if ep_reward >= 0 else (255, 100, 100)
-        self._draw_metric_row(
-            x, y, "Episode", f"{ep_reward:.1f}", available_width, value_color=reward_color)
-        y += line_height
+        self._draw_metric_row_to_surface(
+            temp_surface, 0, content_y, "Episode", f"{ep_reward:.1f}", available_width, value_color=reward_color)
+        content_y += line_height
         total_reward = metrics.get('total_reward', 0)
         total_color = (100, 255, 100) if total_reward >= 0 else (255, 100, 100)
-        self._draw_metric_row(
-            x, y, "Total", f"{total_reward:.1f}", available_width, value_color=total_color)
-        y += line_height + section_gap
+        self._draw_metric_row_to_surface(
+            temp_surface, 0, content_y, "Total", f"{total_reward:.1f}", available_width, value_color=total_color)
+        content_y += line_height + section_gap
 
         # ═══ COMBAT SECTION ═══
-        y = self._draw_section_header(x, y, "COMBAT", available_width)
-        self._draw_metric_row(
-            x, y, "Enemies", env.enemies_destroyed, available_width, emoji='⚔️')
-        y += line_height
-        self._draw_metric_row(
-            x, y, "Spawners", env.spawners_destroyed, available_width, emoji='🎯')
-        y += line_height
+        content_y = self._draw_section_header_to_surface(temp_surface, 0, content_y, "COMBAT", available_width)
+        self._draw_metric_row_to_surface(
+            temp_surface, 0, content_y, "Enemies", env.enemies_destroyed, available_width, emoji='⚔️')
+        content_y += line_height
+        self._draw_metric_row_to_surface(
+            temp_surface, 0, content_y, "Spawners", env.spawners_destroyed, available_width, emoji='🎯')
+        content_y += line_height
         health_pct = int(env.player.get_health_ratio() * 100)
         health_color = config.COLOR_HEALTH_GOOD if health_pct > 60 else config.COLOR_HEALTH_MEDIUM if health_pct > 30 else config.COLOR_HEALTH_BAD
-        self._draw_metric_row(
-            x, y, "Health", f"{health_pct}%", available_width, emoji='❤️', value_color=health_color)
-        y += line_height + section_gap
+        self._draw_metric_row_to_surface(
+            temp_surface, 0, content_y, "Health", f"{health_pct}%", available_width, emoji='❤️', value_color=health_color)
+        content_y += line_height + section_gap
 
         # ═══ ENTITIES SECTION ═══
-        y = self._draw_section_header(x, y, "ENTITIES", available_width)
+        content_y = self._draw_section_header_to_surface(temp_surface, 0, content_y, "ENTITIES", available_width)
         alive_enemies = len([e for e in env.enemies if e.alive])
-        self._draw_metric_row(x, y, "Enemies", alive_enemies, available_width)
-        y += line_height
+        self._draw_metric_row_to_surface(temp_surface, 0, content_y, "Enemies", alive_enemies, available_width)
+        content_y += line_height
         alive_spawners = len([s for s in env.spawners if s.alive])
-        self._draw_metric_row(
-            x, y, "Spawners", alive_spawners, available_width)
-        y += line_height
+        self._draw_metric_row_to_surface(
+            temp_surface, 0, content_y, "Spawners", alive_spawners, available_width)
+        content_y += line_height
         alive_projectiles = len([p for p in env.projectiles if p.alive])
-        self._draw_metric_row(x, y, "Projectiles",
+        self._draw_metric_row_to_surface(temp_surface, 0, content_y, "Projectiles",
                               alive_projectiles, available_width)
-        y += line_height + section_gap
+        content_y += line_height + section_gap
 
         # ═══ PLAYER SECTION ═══
         if env.player.alive:
-            y = self._draw_section_header(x, y, "PLAYER", available_width)
+            content_y = self._draw_section_header_to_surface(temp_surface, 0, content_y, "PLAYER", available_width)
             player_speed = np.linalg.norm(env.player.velocity)
-            self._draw_metric_row(
-                x, y, "Speed", f"{player_speed:.1f}", available_width, emoji='🚀')
-            y += line_height
-            self._draw_metric_row(
-                x, y, "Position", f"({int(env.player.pos[0])},{int(env.player.pos[1])})", available_width, emoji='📍')
-            y += line_height
+            self._draw_metric_row_to_surface(
+                temp_surface, 0, content_y, "Speed", f"{player_speed:.1f}", available_width, emoji='🚀')
+            content_y += line_height
+            self._draw_metric_row_to_surface(
+                temp_surface, 0, content_y, "Position", f"({int(env.player.pos[0])},{int(env.player.pos[1])})", available_width, emoji='📍')
+            content_y += line_height
             rotation_deg = math.degrees(env.player.rotation) % 360
-            self._draw_metric_row(
-                x, y, "Rotation", f"{rotation_deg:.0f}°", available_width, emoji='🔄')
-            y += line_height
-            self._draw_metric_row(
-                x, y, "Cooldown", env.player.shoot_cooldown, available_width, emoji='⏱️')
-            y += line_height + section_gap
+            self._draw_metric_row_to_surface(
+                temp_surface, 0, content_y, "Rotation", f"{rotation_deg:.0f}°", available_width, emoji='🔄')
+            content_y += line_height
+            self._draw_metric_row_to_surface(
+                temp_surface, 0, content_y, "Cooldown", env.player.shoot_cooldown, available_width, emoji='⏱️')
+            content_y += line_height + section_gap
 
         # ═══ MODEL INPUTS SECTION (during evaluation) ═══
         if not is_human and metrics.get('show_inputs', False):
-            y = self._draw_model_inputs_section(x, y, env, available_width, line_height, section_gap)
+            content_y = self._draw_model_inputs_section_to_surface(temp_surface, 0, content_y, env, available_width, line_height, section_gap)
 
         # ═══ SYSTEM SECTION ═══
-        y = self._draw_section_header(x, y, "SYSTEM", available_width)
+        content_y = self._draw_section_header_to_surface(temp_surface, 0, content_y, "SYSTEM", available_width)
         fps = int(self.clock.get_fps())
         fps_color = (100, 255, 100) if fps >= 55 else (
             255, 200, 100) if fps >= 30 else (255, 100, 100)
-        self._draw_metric_row(
-            x, y, "FPS", fps, available_width, value_color=fps_color)
-        y += line_height + section_gap
+        self._draw_metric_row_to_surface(
+            temp_surface, 0, content_y, "FPS", fps, available_width, value_color=fps_color)
+        content_y += line_height + section_gap
 
         # ═══ ACTION SECTION (if model output available) ═══
         if not is_human and self.model_output:
-            y = self._draw_action_section(x, y, available_width, line_height)
+            content_y = self._draw_action_section_to_surface(temp_surface, 0, content_y, available_width, line_height)
         elif is_human:
-            y = self._draw_section_header(x, y, "CONTROLS", available_width)
+            content_y = self._draw_section_header_to_surface(temp_surface, 0, content_y, "CONTROLS", available_width)
             if self.control_style == 1:
-                self._draw_metric_row(
-                    x, y, "Thrust", "W / UP", available_width)
-                y += line_height
-                self._draw_metric_row(
-                    x, y, "Rotate L", "A / LEFT", available_width)
-                y += line_height
-                self._draw_metric_row(
-                    x, y, "Rotate R", "D / RIGHT", available_width)
-                y += line_height
-                self._draw_metric_row(x, y, "Shoot", "SPACE", available_width)
+                self._draw_metric_row_to_surface(
+                    temp_surface, 0, content_y, "Thrust", "W / UP", available_width)
+                content_y += line_height
+                self._draw_metric_row_to_surface(
+                    temp_surface, 0, content_y, "Rotate L", "A / LEFT", available_width)
+                content_y += line_height
+                self._draw_metric_row_to_surface(
+                    temp_surface, 0, content_y, "Rotate R", "D / RIGHT", available_width)
+                content_y += line_height
+                self._draw_metric_row_to_surface(temp_surface, 0, content_y, "Shoot", "SPACE", available_width)
             else:
-                self._draw_metric_row(
-                    x, y, "Move", "WASD / ARROWS", available_width)
-                y += line_height
-                self._draw_metric_row(x, y, "Shoot", "SPACE", available_width)
+                self._draw_metric_row_to_surface(
+                    temp_surface, 0, content_y, "Move", "WASD / ARROWS", available_width)
+                content_y += line_height
+                self._draw_metric_row_to_surface(temp_surface, 0, content_y, "Shoot", "SPACE", available_width)
 
-            y += line_height + section_gap
-            self._draw_metric_row(x, y, "Return to Menu",
+            content_y += line_height + section_gap
+            self._draw_metric_row_to_surface(temp_surface, 0, content_y, "Return to Menu",
                                   "ESC", available_width)
+            content_y += line_height
+        
+        # Calculate max scroll based on content height
+        total_content_height = content_y
+        self.max_scroll = max(0, total_content_height - panel_height + 20)
+        
+        # Clamp scroll offset
+        self.scroll_offset = max(0, min(self.scroll_offset, self.max_scroll))
+        
+        # Blit the visible portion of the temporary surface to the screen
+        # Set up clipping rectangle for the panel content area
+        clip_rect = pygame.Rect(x, y, available_width - 10, panel_height - 10)
+        self.screen.set_clip(clip_rect)
+        
+        # Draw the scrolled content
+        self.screen.blit(temp_surface, (x, y - self.scroll_offset))
+        
+        # Remove clipping
+        self.screen.set_clip(None)
+        
+        # Draw scroll indicator if content is scrollable
+        if self.max_scroll > 0:
+            self._draw_scroll_indicator(x, y, available_width, panel_height)
+            # Draw scroll hint at bottom if not fully scrolled
+            if self.scroll_offset < self.max_scroll:
+                hint_text = self.small_font.render("\u2193 Scroll Down", True, (100, 150, 200))
+                hint_rect = hint_text.get_rect(center=(x + available_width // 2, y + panel_height - 15))
+                # Semi-transparent background
+                bg_surf = pygame.Surface((hint_rect.width + 10, hint_rect.height + 4))
+                bg_surf.set_alpha(180)
+                bg_surf.fill((20, 20, 30))
+                self.screen.blit(bg_surf, (hint_rect.x - 5, hint_rect.y - 2))
+                self.screen.blit(hint_text, hint_rect)
+            # Draw scroll hint at top if scrolled down
+            if self.scroll_offset > 0:
+                hint_text = self.small_font.render("\u2191 Scroll Up", True, (100, 150, 200))
+                hint_rect = hint_text.get_rect(center=(x + available_width // 2, y + 15))
+                # Semi-transparent background
+                bg_surf = pygame.Surface((hint_rect.width + 10, hint_rect.height + 4))
+                bg_surf.set_alpha(180)
+                bg_surf.fill((20, 20, 30))
+                self.screen.blit(bg_surf, (hint_rect.x - 5, hint_rect.y - 2))
+                self.screen.blit(hint_text, hint_rect)
+
+    def _draw_scroll_indicator(self, x, y, width, height):
+        """Draw a scroll indicator on the right side of the panel."""
+        indicator_x = x + width - 15
+        indicator_y = y + 5
+        indicator_height = height - 20
+        
+        # Background track (more visible)
+        pygame.draw.rect(self.screen, (60, 60, 70), 
+                        (indicator_x, indicator_y, 8, indicator_height), border_radius=4)
+        
+        # Calculate thumb position and size
+        content_ratio = (height - 20) / (self.max_scroll + height - 20)
+        thumb_height = max(30, int(indicator_height * content_ratio))
+        scroll_ratio = self.scroll_offset / self.max_scroll if self.max_scroll > 0 else 0
+        thumb_y = indicator_y + int((indicator_height - thumb_height) * scroll_ratio)
+        
+        # Scrollbar thumb (more visible with border)
+        pygame.draw.rect(self.screen, (120, 140, 160), 
+                        (indicator_x, thumb_y, 8, thumb_height), border_radius=4)
+        pygame.draw.rect(self.screen, (150, 170, 190), 
+                        (indicator_x, thumb_y, 8, thumb_height), 1, border_radius=4)
+
+    def handle_scroll(self, event):
+        """Handle mouse wheel scroll events for the metrics panel."""
+        if event.type == pygame.MOUSEWHEEL:
+            # Scroll up (negative y) or down (positive y)
+            scroll_amount = 40  # pixels per scroll notch
+            self.scroll_offset -= event.y * scroll_amount
+            # Clamping is done in _draw_metrics_panel
 
     def _draw_section_header(self, x, y, title, width):
         """Draw a section header with subtle line."""
@@ -345,6 +440,17 @@ class ArenaRenderer:
         # Draw section title
         header = self.section_font.render(title, True, (120, 120, 150))
         self.screen.blit(header, (x + 10, y))
+        return y + 18
+    
+    def _draw_section_header_to_surface(self, surface, x, y, title, width):
+        """Draw a section header with subtle line to a given surface."""
+        # Draw separator line
+        pygame.draw.line(surface, (60, 60, 80),
+                         (x + 5, y), (x + width - 15, y), 1)
+        y += 8
+        # Draw section title
+        header = self.section_font.render(title, True, (120, 120, 150))
+        surface.blit(header, (x + 10, y))
         return y + 18
 
     def _draw_metric_row(self, x, y, label, value, width, emoji=None, value_color=None):
@@ -369,6 +475,29 @@ class ArenaRenderer:
         value_rect.right = value_x
         value_rect.top = y
         self.screen.blit(value_surface, value_rect)
+    
+    def _draw_metric_row_to_surface(self, surface, x, y, label, value, width, emoji=None, value_color=None):
+        """Draw a metric row with optional emoji and right-aligned value to a given surface."""
+        label_x = x + 10
+        value_x = x + width - 20
+
+        # Draw emoji if provided
+        if emoji and self._get_emoji(emoji):
+            emoji_surf = self._get_emoji(emoji)
+            surface.blit(emoji_surf, (label_x, y + 2))
+            label_x += 18
+
+        # Draw label
+        label_surface = self.small_font.render(label, True, (160, 160, 180))
+        surface.blit(label_surface, (label_x, y))
+
+        # Draw value (right-aligned)
+        color = value_color if value_color else config.COLOR_TEXT
+        value_surface = self.small_font.render(str(value), True, color)
+        value_rect = value_surface.get_rect()
+        value_rect.right = value_x
+        value_rect.top = y
+        surface.blit(value_surface, value_rect)
 
     def _draw_model_inputs_section(self, x, y, env, available_width, line_height, section_gap):
         """Draw model inputs section showing what the agent observes."""
@@ -455,6 +584,92 @@ class ArenaRenderer:
                 y += line_height
         
         return y + section_gap
+    
+    def _draw_model_inputs_section_to_surface(self, surface, x, y, env, available_width, line_height, section_gap):
+        """Draw model inputs section showing what the agent observes to a given surface."""
+        y = self._draw_section_header_to_surface(surface, x, y, "MODEL INPUTS", available_width)
+        
+        # Player state inputs
+        player_speed = np.linalg.norm(env.player.velocity)
+        self._draw_metric_row_to_surface(
+            surface, x, y, "Velocity", f"{player_speed:.2f}", available_width)
+        y += line_height
+        
+        rotation_deg = math.degrees(env.player.rotation) % 360
+        self._draw_metric_row_to_surface(
+            surface, x, y, "Rotation", f"{rotation_deg:.0f}°", available_width)
+        y += line_height
+        
+        cooldown_ratio = env.player.shoot_cooldown / config.PLAYER_SHOOT_COOLDOWN
+        self._draw_metric_row_to_surface(
+            surface, x, y, "Cooldown", f"{cooldown_ratio:.2f}", available_width)
+        y += line_height
+        
+        # Add small separator
+        y += 3
+        
+        # Get the k nearest entities
+        nearest_enemies = env._find_k_nearest_entities(env.enemies, k=2)
+        nearest_spawners = env._find_k_nearest_entities(env.spawners, k=2)
+        
+        # Display closest enemy info
+        for i, enemy in enumerate(nearest_enemies):
+            if enemy:
+                from arena.game import utils
+                dist = utils.distance(env.player.pos, enemy.pos)
+                angle = utils.angle_to_point(env.player.pos, enemy.pos)
+                angle_deg = math.degrees(angle) % 360
+                
+                label = f"Enemy {i+1} Dist" if i > 0 else "Enemy Dist"
+                self._draw_metric_row_to_surface(
+                    surface, x, y, label, f"{dist:.1f}", available_width, emoji='👾' if i == 0 else None)
+                y += line_height
+                
+                label = f"Enemy {i+1} Ang" if i > 0 else "Enemy Ang"
+                self._draw_metric_row_to_surface(
+                    surface, x, y, label, f"{angle_deg:.0f}°", available_width)
+                y += line_height
+            else:
+                # No enemy at this index
+                label = f"Enemy {i+1}" if i > 0 else "Enemy"
+                self._draw_metric_row_to_surface(
+                    surface, x, y, label, "None", available_width, value_color=(100, 100, 100))
+                y += line_height
+        
+        # Add small separator
+        y += 3
+        
+        # Display closest spawner info
+        for i, spawner in enumerate(nearest_spawners):
+            if spawner:
+                from arena.game import utils
+                dist = utils.distance(env.player.pos, spawner.pos)
+                angle = utils.angle_to_point(env.player.pos, spawner.pos)
+                angle_deg = math.degrees(angle) % 360
+                health_pct = int((spawner.health / spawner.max_health) * 100)
+                
+                label = f"Spawn {i+1} Dist" if i > 0 else "Spawn Dist"
+                self._draw_metric_row_to_surface(
+                    surface, x, y, label, f"{dist:.1f}", available_width, emoji='🎯' if i == 0 else None)
+                y += line_height
+                
+                label = f"Spawn {i+1} Ang" if i > 0 else "Spawn Ang"
+                self._draw_metric_row_to_surface(
+                    surface, x, y, label, f"{angle_deg:.0f}°", available_width)
+                y += line_height
+                
+                label = f"Spawn {i+1} HP" if i > 0 else "Spawn HP"
+                self._draw_metric_row_to_surface(
+                    surface, x, y, label, f"{health_pct}%", available_width)
+                y += line_height
+            else:
+                # No spawner at this index
+                label = f"Spawn {i+1}" if i > 0 else "Spawn"
+                self._draw_metric_row_to_surface(
+                    surface, x, y, label, "None", available_width, value_color=(100, 100, 100))
+                y += line_height
+        
+        return y + section_gap
 
     def _draw_action_section(self, x, y, available_width, line_height):
         """Draw action distribution section integrated into metrics panel."""
@@ -533,6 +748,86 @@ class ArenaRenderer:
             conf_text = self.small_font.render(
                 f"Conf:{int(conf_ratio*100)}%", True, e_color)
             self.screen.blit(conf_text, (x + 80, y))
+
+        return y + line_height
+    
+    def _draw_action_section_to_surface(self, surface, x, y, available_width, line_height):
+        """Draw action distribution section to a given surface."""
+        output = self.model_output
+        if not output:
+            return y
+
+        # Section header
+        title_text = "ACTION" if not output.is_q_value else "Q-VALUES"
+        y = self._draw_section_header_to_surface(surface, x, y, title_text, available_width)
+
+        labels = STYLE_1_LABELS if self.control_style == 1 else STYLE_2_LABELS
+        values = output.action_probs if not output.is_q_value else output.q_values
+
+        if values is not None:
+            # Normalize Q-values for bar display
+            if output.is_q_value:
+                v_min, v_max = np.min(values), np.max(values)
+                display_probs = (values - v_min) / (v_max -
+                                                    v_min) if v_max > v_min else np.zeros_like(values)
+            else:
+                display_probs = values
+
+            bar_max_width = available_width - 100
+            bar_height = 12
+
+            for i, (label, prob) in enumerate(zip(labels, display_probs)):
+                is_selected = i == output.action_taken
+
+                # Label (compact)
+                label_color = config.COLOR_ACTION_SELECTED if is_selected else (
+                    150, 150, 170)
+                txt = self.small_font.render(
+                    label[:6], True, label_color)  # Truncate long labels
+                surface.blit(txt, (x + 10, y))
+
+                # Bar background
+                bar_x = x + 60
+                pygame.draw.rect(surface, (40, 40, 60),
+                                 (bar_x, y + 2, bar_max_width, bar_height))
+
+                # Probability bar
+                bar_width = int(bar_max_width * prob)
+                bar_color = config.COLOR_ACTION_BAR_HIGH if is_selected else config.COLOR_ACTION_BAR_LOW
+                pygame.draw.rect(surface, bar_color,
+                                 (bar_x, y + 2, bar_width, bar_height))
+
+                # Selection highlight
+                if is_selected:
+                    pygame.draw.rect(surface, config.COLOR_ACTION_SELECTED,
+                                     (bar_x, y + 2, bar_max_width, bar_height), 1)
+
+                # Value text (right-aligned)
+                val_text = f"{values[i]:.2f}" if output.is_q_value else f"{int(values[i]*100)}%"
+                val_surf = self.small_font.render(
+                    val_text, True, config.COLOR_TEXT)
+                val_rect = val_surf.get_rect(
+                    right=x + available_width - 15, top=y)
+                surface.blit(val_surf, val_rect)
+
+                y += 18
+
+        # V-Estimate and Confidence on same line
+        y += 4
+        if output.value is not None:
+            v_color = config.COLOR_VALUE_POSITIVE if output.value >= 0 else config.COLOR_VALUE_NEGATIVE
+            v_text = self.small_font.render(
+                f"V:{output.value:.2f}", True, v_color)
+            surface.blit(v_text, (x + 10, y))
+
+        if output.entropy is not None:
+            n_actions = len(labels)
+            max_entropy = math.log(n_actions)
+            conf_ratio = 1.0 - min(output.entropy / max_entropy, 1.0)
+            e_color = config.COLOR_ENTROPY_HIGH if conf_ratio > 0.7 else config.COLOR_ENTROPY_LOW
+            conf_text = self.small_font.render(
+                f"Conf:{int(conf_ratio*100)}%", True, e_color)
+            surface.blit(conf_text, (x + 80, y))
 
         return y + line_height
 
@@ -845,6 +1140,42 @@ class ArenaRenderer:
         value_surf = self.small_font.render(str(value), True, (255, 255, 255))
         self.screen.blit(label_surf, (x, y))
         self.screen.blit(value_surf, (x + 120, y))
+
+    def draw_victory_screen(self, win_step, episode_reward, current_phase):
+        """Draw centered victory overlay when all phases are completed."""
+        # Semi-transparent dark overlay
+        overlay = pygame.Surface((config.SCREEN_WIDTH, config.SCREEN_HEIGHT))
+        overlay.set_alpha(220)
+        overlay.fill((0, 0, 20))
+        self.screen.blit(overlay, (0, 0))
+        
+        # Main victory message
+        victory_text = self.title_font.render("🎉 YOU WIN! 🎉", True, (255, 215, 0))
+        victory_rect = victory_text.get_rect(center=(config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2 - 80))
+        self.screen.blit(victory_text, victory_rect)
+        
+        # All phases completed message
+        phase_text = self.font.render(f"All {config.MAX_PHASES} Phases Completed!", True, (100, 255, 100))
+        phase_rect = phase_text.get_rect(center=(config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2 - 40))
+        self.screen.blit(phase_text, phase_rect)
+        
+        # Stats
+        stats_y = config.SCREEN_HEIGHT // 2 + 10
+        
+        # Steps taken
+        steps_text = self.small_font.render(f"Steps: {win_step:,}", True, (200, 200, 255))
+        steps_rect = steps_text.get_rect(center=(config.SCREEN_WIDTH // 2, stats_y))
+        self.screen.blit(steps_text, steps_rect)
+        
+        # Final reward
+        reward_text = self.small_font.render(f"Total Reward: {episode_reward:.1f}", True, (200, 200, 255))
+        reward_rect = reward_text.get_rect(center=(config.SCREEN_WIDTH // 2, stats_y + 30))
+        self.screen.blit(reward_text, reward_rect)
+        
+        # Continue instruction
+        continue_text = self.small_font.render("Press SPACE to continue or ESC for menu", True, (150, 150, 150))
+        continue_rect = continue_text.get_rect(center=(config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2 + 100))
+        self.screen.blit(continue_text, continue_rect)
 
     def render_menu(self, menu):
         """Render selection menu."""
