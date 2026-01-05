@@ -133,6 +133,8 @@ REWARD_AIMING = 0.5                # Reward for pointing at an enemy/spawner
 AIMING_ANGLE_THRESHOLD = 0.2        # Radians (approx 11 degrees)
 REWARD_ACCURATE_SHOT = 5.0          # Reward for shooting while aiming correctly
 REWARD_APPROACH_SPAWNER = 0.1       # Reward for moving closer to spawners
+REWARD_STYLE2_ALIGNMENT_BONUS = 1 # Extra reward for Style 2 alignment
+
 # Activity Penalties (discourage passive/corner-hiding play)
 PENALTY_INACTIVITY = 0          # Per-step penalty when not moving enough
 PENALTY_CORNER = -0.1               # Per-step penalty when too close to edges
@@ -141,8 +143,8 @@ INACTIVITY_VELOCITY_THRESHOLD = 0.5  # Minimum velocity magnitude to be "active"
 
 # Reward Shaping
 SHAPING_MODE = "delta"  # Simpler selection
-SHAPING_SCALE = 1.0
-SHAPING_CLIP = 0.2
+SHAPING_SCALE = 2.0
+SHAPING_CLIP = 1.5
 
 # Curriculum Learning
 CURRICULUM_ENABLED = True

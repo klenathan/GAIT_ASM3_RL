@@ -584,6 +584,10 @@ class ArenaEnv(gym.Env):
                 # Scale reward by how precise the aim is (closer to 0 diff = higher reward)
                 precision = 1.0 - (angle_diff / config.AIMING_ANGLE_THRESHOLD)
                 aiming_reward = config.REWARD_AIMING * precision
+                
+                # Extra bonus for Style 2 since alignment is harder (requires movement)
+                if self.control_style == 2:
+                    aiming_reward += config.REWARD_STYLE2_ALIGNMENT_BONUS * precision
 
         reward += aiming_reward
 
