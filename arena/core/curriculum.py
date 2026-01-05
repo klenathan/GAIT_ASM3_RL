@@ -308,8 +308,8 @@ def get_default_stages() -> List[CurriculumStage]:
             min_spawner_kill_rate=1.2,
             # Some wins required (reduced from 0.15)
             min_win_rate=0.10,
-            min_survival_steps=750,       # Good survival (reduced from 800)
-            max_survival_steps=1500,      # Don't be too passive (more lenient)
+            min_survival_steps=800,       # Good survival (reduced from 800)
+            max_survival_steps=2000,      # Don't be too passive (more lenient)
             # Must actively fight enemies (reduced from 8.0)
             min_enemy_kill_rate=5.0,
             # Must deal damage (reduced from 150.0)
@@ -332,11 +332,11 @@ def get_default_stages() -> List[CurriculumStage]:
             min_spawner_kill_rate=2.2,    # High spawner kill rate
             min_win_rate=0.35,            # Decent win rate
             min_survival_steps=700,       # Moderate survival (don't hide)
-            max_survival_steps=1200,      # Win quickly, don't drag out
+            max_survival_steps=2000,      # Win quickly, don't drag out
             min_enemy_kill_rate=12.0,     # High enemy elimination
             min_damage_dealt=250.0,       # High damage output
             max_damage_taken=150.0,       # Good defense despite aggression
-            max_win_time=1000,            # Fast wins (when winning)
+            # max_win_time=2000,            # Fast wins (when winning)
             min_episodes=200,
         ),
 
@@ -351,16 +351,39 @@ def get_default_stages() -> List[CurriculumStage]:
             enemy_speed_mult=1.0,         # Full enemy speed
             shaping_scale_mult=0.5,       # Minimal shaping - pure skill
             damage_penalty_mult=1.0,      # Standard penalty
-            # Final stage - elite combat performance required
+            # Advance to final stage - elite combat performance required
             min_spawner_kill_rate=3.0,    # Excellent spawner destruction
             min_win_rate=0.6,             # High win rate
             min_survival_steps=600,       # Don't need long survival - win fast!
-            max_survival_steps=950,       # Must win quickly, no passive play
+            max_survival_steps=2000,
             min_enemy_kill_rate=15.0,     # Very high kill rate
             min_damage_dealt=350.0,       # Excellent damage output
             max_damage_taken=120.0,       # Excellent defense
-            max_win_time=850,             # Fast, efficient wins required
+            # max_win_time=2000,             # Fast, efficient wins required
             min_episodes=250,
+        ),
+
+        # Grade 7: Normal Game
+        # Behavior Focus: Play with standard game settings - no assistance or modifications
+        # All multipliers at 1.0 for authentic game experience
+        CurriculumStage(
+            name="Grade 7: Normal Game",
+            spawn_cooldown_mult=1.0,      # Standard spawn rate
+            max_enemies_mult=1.0,         # Standard enemy count
+            spawner_health_mult=1.0,      # Standard spawner health
+            enemy_speed_mult=1.0,         # Standard enemy speed
+            shaping_scale_mult=1.0,       # Standard reward shaping
+            damage_penalty_mult=1.0,      # Standard damage penalty
+            # Final stage - no advancement (just continuous training at normal difficulty)
+            # min_spawner_kill_rate=0.0,    # No requirements
+            # min_win_rate=0.0,             # No requirements
+            # min_survival_steps=0,         # No requirements
+            # max_survival_steps=999999,    # No limits
+            # min_enemy_kill_rate=0.0,      # No requirements
+            # min_damage_dealt=0.0,         # No requirements
+            # max_damage_taken=999999.0,    # No limits
+            # max_win_time=999999,          # No limits
+            # min_episodes=999999,          # Never advance (final stage)
         ),
     ]
 

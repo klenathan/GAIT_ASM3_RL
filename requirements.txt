@@ -1,5 +1,6 @@
 pygame
 gymnasium
-stable-baselines3[extra]
+pufferlib
 numpy
 tensorboard
+wandb
