@@ -4,6 +4,8 @@ In-game menu for evaluation configuration.
 
 from arena.training.algorithms import dqn, ppo, ppo_lstm, a2c
 from arena.training.registry import AlgorithmRegistry
+from arena.training.training_state import find_training_state
+from arena.core.curriculum import CurriculumManager, CurriculumConfig
 from arena.core import config
 import os
 import pygame
@@ -39,6 +41,10 @@ class Menu:
 
         self.deterministic = True
         self.show_all_models = False  # Toggle for showing all vs filtered
+        
+        # Curriculum options: None (full difficulty), 0-5 (stages), or "auto"
+        self.curriculum_options = ["None", "Auto", "0", "1", "2", "3", "4", "5"]
+        self.selected_curriculum_idx = 1  # Default to "Auto"
 
         # Apply initial filter
         self._filter_models()
@@ -346,10 +352,16 @@ class Menu:
             self._draw_option_toggle(self.sidebar_x, y, "Deterministic:", det_text,
                                      0 if self.deterministic else 1, 2, hovered=(self.hovered_button == "deterministic"))
             y += 60
+            # Curriculum stage toggle
+            curr_text = self.curriculum_options[self.selected_curriculum_idx]
+            self._draw_option_toggle(self.sidebar_x, y, "Curriculum:", curr_text,
+                                     self.selected_curriculum_idx, len(self.curriculum_options), 
+                                     hovered=(self.hovered_button == "curriculum"))
+            y += 60
             filter_text = "All Models" if self.show_all_models else "Filtered"
             self._draw_option_toggle(self.sidebar_x, y, "Display Mode:", filter_text,
                                      0 if self.show_all_models else 1, 2, hovered=(self.hovered_button == "show_all"))
-            y += 70
+            y += 50
 
             # Draw Refresh Button
             refresh_btn_rect = pygame.Rect(self.sidebar_x, y, 150, 40)
@@ -502,12 +514,27 @@ class Menu:
         if not self.models:
             return None
         model = self.models[self.selected_model_idx]
+        
+        # Determine curriculum stage
+        curriculum_option = self.curriculum_options[self.selected_curriculum_idx]
+        if curriculum_option == "None":
+            curriculum_stage = None
+            auto_curriculum = False
+        elif curriculum_option == "Auto":
+            curriculum_stage = None
+            auto_curriculum = True
+        else:
+            curriculum_stage = int(curriculum_option)
+            auto_curriculum = False
+        
         return {
             "mode": "Model",
             "model": model["path"],
             "algo": model["algo"],
             "style": model["style"],
-            "deterministic": self.deterministic
+            "deterministic": self.deterministic,
+            "curriculum_stage": curriculum_stage,
+            "auto_curriculum": auto_curriculum
         }
 
     def handle_sidebar_clicks(self, pos):
@@ -536,9 +563,13 @@ class Menu:
             elif 180 <= y_rel <= 220:
                 self.deterministic = not self.deterministic
             elif 240 <= y_rel <= 280:
+                # Curriculum toggle
+                self.selected_curriculum_idx = (
+                    self.selected_curriculum_idx + 1) % len(self.curriculum_options)
+            elif 300 <= y_rel <= 340:
                 self.show_all_models = not self.show_all_models
                 self._filter_models()
-            elif 310 <= y_rel <= 350:
+            elif 350 <= y_rel <= 390:
                 self.refresh_models()
         else:
             # In human mode, refresh button is at 120
@@ -588,6 +619,8 @@ class Menu:
                 elif 180 <= y_rel <= 220:
                     self.hovered_button = "deterministic"
                 elif 240 <= y_rel <= 280:
+                    self.hovered_button = "curriculum"
+                elif 300 <= y_rel <= 340:
                     self.hovered_button = "show_all"
-                elif 310 <= y_rel <= 350:
+                elif 350 <= y_rel <= 390:
                     self.hovered_button = "refresh"

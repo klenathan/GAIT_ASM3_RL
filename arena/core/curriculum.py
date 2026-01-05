@@ -281,44 +281,44 @@ def get_auto_stages(num_stages: int = 10) -> List[CurriculumStage]:
 def get_manual_stages() -> List[CurriculumStage]:
     """Return default handcrafted curriculum progression."""
     return [
-        # Grade 1: Survival Basics
-        # Behavior Focus: Basic movement, staying alive, avoiding damage
-        # Low enemy count, slow enemies, reduced damage penalties, high shaping guidance
-        CurriculumStage(
-            name="Grade 1: Survival Basics",
-            spawn_cooldown_mult=2.5,      # Very slow spawns - less pressure
-            max_enemies_mult=0.3,         # Very few enemies - focus on survival
-            # Easy spawners (but not the focus yet)
-            spawner_health_mult=0.4,
-            enemy_speed_mult=0.2,         # Slow enemies - easier to avoid
-            shaping_scale_mult=4.0,       # High guidance for basic movement
-            damage_penalty_mult=0.3,      # Low damage penalty - encourage exploration
-            # Advancement: Must survive consistently
-            min_spawner_kill_rate=0.1,    # Spawner kills not required
-            min_win_rate=0.0,             # Wins not required
-            min_survival_steps=400,       # Must survive ~400 steps consistently
-            min_episodes=50,
-        ),
+        # # Grade 1: Survival Basics
+        # # Behavior Focus: Basic movement, staying alive, avoiding damage
+        # # Low enemy count, slow enemies, reduced damage penalties, high shaping guidance
+        # CurriculumStage(
+        #     name="Grade 1: Survival Basics",
+        #     spawn_cooldown_mult=2.5,      # Very slow spawns - less pressure
+        #     max_enemies_mult=0.3,         # Very few enemies - focus on survival
+        #     # Easy spawners (but not the focus yet)
+        #     spawner_health_mult=0.4,
+        #     enemy_speed_mult=0.2,         # Slow enemies - easier to avoid
+        #     shaping_scale_mult=4.0,       # High guidance for basic movement
+        #     damage_penalty_mult=0.3,      # Low damage penalty - encourage exploration
+        #     # Advancement: Must survive consistently
+        #     min_spawner_kill_rate=0.1,    # Spawner kills not required
+        #     min_win_rate=0.0,             # Wins not required
+        #     min_survival_steps=400,       # Must survive ~400 steps consistently
+        #     min_episodes=50,
+        # ),
 
-        # Grade 2: Enemy Elimination
-        # Behavior Focus: Targeting and destroying enemies
-        # More enemies, moderate speed, emphasis on enemy kills
-        CurriculumStage(
-            name="Grade 2: Enemy Elimination",
-            spawn_cooldown_mult=2.0,      # Slower spawns - focus on existing enemies
-            max_enemies_mult=0.5,         # More enemies to practice on
-            spawner_health_mult=0.5,      # Still easy spawners
-            enemy_speed_mult=0.85,        # Moderate speed
-            shaping_scale_mult=3.0,       # Good guidance for combat
-            damage_penalty_mult=0.6,      # Moderate penalty - learn to fight safely
-            # Advancement: Must kill enemies consistently
-            min_spawner_kill_rate=0.3,    # Spawners still not focus
-            min_win_rate=0.0,             # Wins not required
-            min_survival_steps=600,       # Longer survival with combat
-            min_enemy_kill_rate=3.0,      # MUST kill at least 3 enemies per episode on average
-            min_damage_dealt=50.0,        # Must deal damage to enemies
-            min_episodes=75,
-        ),
+        # # Grade 2: Enemy Elimination
+        # # Behavior Focus: Targeting and destroying enemies
+        # # More enemies, moderate speed, emphasis on enemy kills
+        # CurriculumStage(
+        #     name="Grade 2: Enemy Elimination",
+        #     spawn_cooldown_mult=2.0,      # Slower spawns - focus on existing enemies
+        #     max_enemies_mult=0.5,         # More enemies to practice on
+        #     spawner_health_mult=0.5,      # Still easy spawners
+        #     enemy_speed_mult=0.85,        # Moderate speed
+        #     shaping_scale_mult=3.0,       # Good guidance for combat
+        #     damage_penalty_mult=0.6,      # Moderate penalty - learn to fight safely
+        #     # Advancement: Must kill enemies consistently
+        #     min_spawner_kill_rate=0.3,    # Spawners still not focus
+        #     min_win_rate=0.0,             # Wins not required
+        #     min_survival_steps=600,       # Longer survival with combat
+        #     min_enemy_kill_rate=3.0,      # MUST kill at least 3 enemies per episode on average
+        #     min_damage_dealt=50.0,        # Must deal damage to enemies
+        #     min_episodes=75,
+        # ),
 
         # Grade 3: Spawner Targeting
         # Behavior Focus: Destroying spawners to progress phases
@@ -355,7 +355,7 @@ def get_manual_stages() -> List[CurriculumStage]:
             # Some wins required (reduced from 0.15)
             min_win_rate=0.10,
             min_survival_steps=750,       # Good survival (reduced from 800)
-            max_survival_steps=1500,      # Don't be too passive (more lenient)
+            max_survival_steps=2000,      # Don't be too passive (more lenient)
             # Must actively fight enemies (reduced from 8.0)
             min_enemy_kill_rate=5.0,
             # Must deal damage (reduced from 150.0)
@@ -378,11 +378,11 @@ def get_manual_stages() -> List[CurriculumStage]:
             min_spawner_kill_rate=2.2,    # High spawner kill rate
             min_win_rate=0.35,            # Decent win rate
             min_survival_steps=700,       # Moderate survival (don't hide)
-            max_survival_steps=1200,      # Win quickly, don't drag out
+            max_survival_steps=1700,      # Win quickly, don't drag out
             min_enemy_kill_rate=12.0,     # High enemy elimination
             min_damage_dealt=250.0,       # High damage output
             max_damage_taken=150.0,       # Good defense despite aggression
-            max_win_time=1000,            # Fast wins (when winning)
+            # max_win_time=1000,            # Fast wins (when winning)
             min_episodes=200,
         ),
 
@@ -401,11 +401,11 @@ def get_manual_stages() -> List[CurriculumStage]:
             min_spawner_kill_rate=3.0,    # Excellent spawner destruction
             min_win_rate=0.6,             # High win rate
             min_survival_steps=600,       # Don't need long survival - win fast!
-            max_survival_steps=950,       # Must win quickly, no passive play
+            max_survival_steps=1700,       # Must win quickly, no passive play
             min_enemy_kill_rate=15.0,     # Very high kill rate
             min_damage_dealt=350.0,       # Excellent damage output
             max_damage_taken=120.0,       # Excellent defense
-            max_win_time=850,             # Fast, efficient wins required
+            # max_win_time=850,             # Fast, efficient wins required
             min_episodes=250,
         ),
     ]
