@@ -33,32 +33,28 @@ class PufferPPOTrainer:
     def __init__(self, config: TrainerConfig):
         self.config = config
         
-        # Use DeviceManager for robust device selection and optimization
-        self.device = DeviceManager.get_device(config.device)
-        DeviceManager.setup_optimizations(self.device)
+        # Simple device selection
+        if config.device == "auto":
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            if self.device == "cpu" and torch.backends.mps.is_available():
+                self.device = "mps"
+        else:
+            self.device = config.device
 
         # PPO Hyperparameters from config
         self.total_timesteps = config.total_timesteps
         self.learning_rate = config.learning_rate
         
-        # Smart default for num_envs based on device
-        if self.device == "cuda":
-            # Force high parallelism on CUDA to utilize GPU, even if user requested less
-            if config.num_envs and config.num_envs < NUM_ENVS_DEFAULT_CUDA:
-                print(f"\n[WARNING] Requested {config.num_envs} envs on CUDA, which underutilizes the GPU.")
-                print(f"[INFO] Forcing num_envs to {NUM_ENVS_DEFAULT_CUDA} to maximize GPU throughput.")
-                self.num_envs = NUM_ENVS_DEFAULT_CUDA
-            elif config.num_envs:
-                self.num_envs = config.num_envs
-            else:
-                self.num_envs = NUM_ENVS_DEFAULT_CUDA
-        elif self.device == "mps":
-             if config.num_envs:
-                self.num_envs = config.num_envs
-             else:
-                self.num_envs = NUM_ENVS_DEFAULT_MPS
+        # Set num_envs based on config or defaults
+        if config.num_envs:
+            self.num_envs = config.num_envs
         else:
-            self.num_envs = config.num_envs if config.num_envs else NUM_ENVS_DEFAULT_CPU
+            if self.device == "cuda":
+                self.num_envs = NUM_ENVS_DEFAULT_CUDA
+            elif self.device == "mps":
+                self.num_envs = NUM_ENVS_DEFAULT_MPS
+            else:
+                self.num_envs = NUM_ENVS_DEFAULT_CPU
                 
         self.num_steps = config.num_steps
         self.anneal_lr = True
@@ -87,18 +83,16 @@ class PufferPPOTrainer:
         self.log_path = os.path.join(config.runs_dir, self.run_name)
         self.writer = SummaryWriter(self.log_path)
 
-        print(f"Initializing PufferPPOTrainer on {self.device}")
+        print(f"Initializing PufferPPOTrainer on {self.device} with {self.num_envs} envs")
 
     def train(self):
         # Vectorization
         # PufferLib v3: Multiprocessing(env_creators, env_args, env_kwargs, num_envs, num_workers=...)
         
-        # Limit num_workers to cpu_count to avoid "num_workers > hardware cores" error
-        # PufferLib is optimized for 1 worker per core, handling multiple envs per worker.
+        # Use all available CPU cores for workers
         num_workers = os.cpu_count() or 1
         
-        # Enable overwork to prevent crashes on Colab/Containers where os.cpu_count() > physical cores
-        # This allows using logical cores (vCPUs) even if PufferLib prefers physical cores.
+        # Enable overwork to allow more envs than cores (essential for Colab)
         vec_env = pufferlib.vector.Multiprocessing(
             [make_puffer_env] * self.num_envs,
             [[] for _ in range(self.num_envs)],

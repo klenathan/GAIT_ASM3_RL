@@ -150,7 +150,7 @@ CURRICULUM_WINDOW = 100  # Episodes for averaging
 
 # Parallel Environments
 NUM_ENVS_DEFAULT_MPS = 64
-NUM_ENVS_DEFAULT_CUDA = 4096  # Massive parallelism for GPU
+NUM_ENVS_DEFAULT_CUDA = 1024  # Balanced for Colab T4 (2 vCPUs + 1 GPU)
 NUM_ENVS_DEFAULT_CPU = 12
 
 # Storage - Unified directory structure
