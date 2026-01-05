@@ -118,17 +118,17 @@ PHASE_CONFIG = [
 MAX_PHASES = len(PHASE_CONFIG)
 
 # Reward Structure
-MAX_STEPS = 3000
-STEP_REWARD = 0.1
+MAX_STEPS = 30000
+STEP_REWARD = 0.0  # DEPRECATED: Use REWARD_STEP_SURVIVAL
 REWARD_ENEMY_DESTROYED = 5.0
-REWARD_SPAWNER_DESTROYED = 75.0
-REWARD_PHASE_COMPLETE = 100.0
-REWARD_DAMAGE_TAKEN = -2.0
-REWARD_DEATH = -100.0
-REWARD_STEP_SURVIVAL = -0.1
-REWARD_HIT_ENEMY = 2.0
-REWARD_HIT_SPAWNER = 10.0
-REWARD_SHOT_FIRED = 0.0
+REWARD_SPAWNER_DESTROYED = 100.0  # The main jackpot
+REWARD_PHASE_COMPLETE = 300.0
+REWARD_DAMAGE_TAKEN = -5.0  # Reduced from -50 (too harsh)
+REWARD_DEATH = -50.0  # Reduced from -200 (allow learning from mistakes)
+REWARD_STEP_SURVIVAL = -0.05  # Slight hunger cost to prevent stalling
+REWARD_HIT_ENEMY = 1.0  # Drastically reduced from 50 (farming prevention)
+REWARD_HIT_SPAWNER = 2.0  # Reduced from 90 (focus on destruction)
+REWARD_SHOT_FIRED = 0.0  # Removed penalty for shooting
 REWARD_QUICK_SPAWNER_KILL = 50.0
 
 # Activity Penalties (discourage passive/corner-hiding play)
