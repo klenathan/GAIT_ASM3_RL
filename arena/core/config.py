@@ -129,7 +129,10 @@ REWARD_HIT_SPAWNER = 2.0
 REWARD_ENEMY_DESTROYED = 1.0
 REWARD_SHOT_FIRED = 0.0
 REWARD_QUICK_SPAWNER_KILL = 100.0
-
+REWARD_AIMING = 0.5                # Reward for pointing at an enemy/spawner
+AIMING_ANGLE_THRESHOLD = 0.2        # Radians (approx 11 degrees)
+REWARD_ACCURATE_SHOT = 5.0          # Reward for shooting while aiming correctly
+REWARD_APPROACH_SPAWNER = 0.1       # Reward for moving closer to spawners
 # Activity Penalties (discourage passive/corner-hiding play)
 PENALTY_INACTIVITY = 0          # Per-step penalty when not moving enough
 PENALTY_CORNER = -0.1               # Per-step penalty when too close to edges
@@ -220,10 +223,11 @@ class TrainerConfig:
 @dataclass
 class DQNHyperparams:
     learning_rate: float = 3e-4
-    buffer_size: int = 100_000
+    # buffer_size: int = 100_000
+    buffer_size: int = 500_000
     batch_size: int = 64
     gamma: float = 0.99
-    exploration_fraction: float = 0.5
+    exploration_fraction: float = 0.2
     exploration_initial_eps: float = 1.0
     exploration_final_eps: float = 0.05
     target_update_interval: int = 1000

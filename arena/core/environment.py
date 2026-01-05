@@ -132,6 +132,16 @@ class ArenaEnv(gym.Env):
                 (self.control_style == 2 and action == 5)):
             if self.player.shoot():
                 reward += float(config.REWARD_SHOT_FIRED)
+
+                # Accurate Shot Reward: Bonus for shooting while aiming at a target
+                targets = [e for e in self.enemies if e.alive] + [s for s in self.spawners if s.alive]
+                nearest_target = self._find_nearest_entity(targets)
+                if nearest_target:
+                    angle_to_target = utils.angle_to_point(self.player.pos, nearest_target.pos)
+                    angle_diff = abs(utils.relative_angle(self.player.rotation, angle_to_target))
+                    if angle_diff < config.AIMING_ANGLE_THRESHOLD:
+                        reward += config.REWARD_ACCURATE_SHOT
+
                 # Both styles use player.rotation for shooting
                 # Style 1: rotation follows player's facing direction
                 # Style 2: rotation is fixed (randomized at episode start)
@@ -172,7 +182,7 @@ class ArenaEnv(gym.Env):
 
         reward += self._handle_collisions()
         reward += float(config.REWARD_STEP_SURVIVAL)
-        # reward += self._calculate_shaping_reward()
+        reward += self._calculate_shaping_reward()
 
         self.enemies = [e for e in self.enemies if e.alive]
         self.spawners = [s for s in self.spawners if s.alive]
@@ -250,6 +260,7 @@ class ArenaEnv(gym.Env):
         self._prev_spawner_total_health = None
         self._prev_enemy_count = None
         self._prev_player_health = None
+        self._prev_min_spawner_dist = None
 
     def _get_spawner_position_smart(self, spawner_index, total_spawners):
         """Generate random spawner position with minimum distance from player spawn."""
@@ -533,13 +544,49 @@ class ArenaEnv(gym.Env):
         self._prev_enemy_count = len([e for e in self.enemies if e.alive])
         self._prev_player_health = self.player.health
 
+        # Approach Spawner Reward: Potential-based reward for moving closer to spawners
+        approach_reward = 0.0
+        active_spawners = [s for s in self.spawners if s.alive]
+        if active_spawners:
+            # Find distance to nearest spawner
+            min_dist = min(utils.distance(self.player.pos, s.pos) for s in active_spawners)
+            
+            if self._prev_min_spawner_dist is not None:
+                # Positive if moved closer (prev > current)
+                diff = self._prev_min_spawner_dist - min_dist
+                # Scale by config factor
+                approach_reward = diff * config.REWARD_APPROACH_SPAWNER
+            
+            self._prev_min_spawner_dist = min_dist
+        else:
+            self._prev_min_spawner_dist = None
+
         # Apply curriculum scaling
         shaping_scale = config.SHAPING_SCALE
         if self.curriculum_stage:
             shaping_scale *= self.curriculum_stage.shaping_scale_mult
 
         # Normalize and scale
-        reward = efficiency * shaping_scale * 0.01
+        reward = efficiency * shaping_scale * 0.01 + approach_reward
+
+        # Aiming Reward: Bonus for pointing at enemies/spawners
+        aiming_reward = 0.0
+        targets = [e for e in self.enemies if e.alive] + [s for s in self.spawners if s.alive]
+        
+        # Find nearest target to avoid rewarding for pointing at distant targets through walls
+        nearest_target = self._find_nearest_entity(targets)
+        
+        if nearest_target:
+            angle_to_target = utils.angle_to_point(self.player.pos, nearest_target.pos)
+            angle_diff = abs(utils.relative_angle(self.player.rotation, angle_to_target))
+            
+            if angle_diff < config.AIMING_ANGLE_THRESHOLD:
+                # Scale reward by how precise the aim is (closer to 0 diff = higher reward)
+                precision = 1.0 - (angle_diff / config.AIMING_ANGLE_THRESHOLD)
+                aiming_reward = config.REWARD_AIMING * precision
+
+        reward += aiming_reward
+
         return float(np.clip(reward, -config.SHAPING_CLIP, config.SHAPING_CLIP))
 
     def _get_info(self):
