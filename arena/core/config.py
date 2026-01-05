@@ -119,21 +119,21 @@ MAX_PHASES = len(PHASE_CONFIG)
 MAX_STEPS = 3000
 
 MAX_STEPS = 3000
-REWARD_SPAWNER_DESTROYED = 100.0
+REWARD_SPAWNER_DESTROYED = 0.9
 REWARD_PHASE_COMPLETE = 0.0
-REWARD_DAMAGE_TAKEN = -2.0
-REWARD_DEATH = -100.0
+REWARD_DAMAGE_TAKEN = -0.01
+REWARD_DEATH = -1.0
 REWARD_STEP_SURVIVAL = -0.01
-REWARD_HIT_ENEMY = 0.5
-REWARD_HIT_SPAWNER = 2.0
-REWARD_ENEMY_DESTROYED = 1.0
+REWARD_HIT_ENEMY = 0.01
+REWARD_HIT_SPAWNER = 0.1
+REWARD_ENEMY_DESTROYED = 0.01
 REWARD_SHOT_FIRED = 0.0
-REWARD_QUICK_SPAWNER_KILL = 100.0
-REWARD_AIMING = 0.5                # Reward for pointing at an enemy/spawner
-AIMING_ANGLE_THRESHOLD = 0.2        # Radians (approx 11 degrees)
-REWARD_ACCURATE_SHOT = 5.0          # Reward for shooting while aiming correctly
-REWARD_APPROACH_SPAWNER = 0.1       # Reward for moving closer to spawners
-REWARD_STYLE2_ALIGNMENT_BONUS = 1 # Extra reward for Style 2 alignment
+REWARD_QUICK_SPAWNER_KILL = 0.2
+REWARD_AIMING = 0.2                # Reward for pointing at an enemy/spawner
+AIMING_ANGLE_THRESHOLD = 0.1        # Radians (approx 11 degrees)
+REWARD_ACCURATE_SHOT = 0.1          # Reward for shooting while aiming correctly
+REWARD_APPROACH_SPAWNER = 0.2       # Reward for moving closer to spawners
+REWARD_STYLE2_ALIGNMENT_BONUS = 0.8 # Extra reward for Style 2 alignment
 
 # Activity Penalties (discourage passive/corner-hiding play)
 PENALTY_INACTIVITY = 0          # Per-step penalty when not moving enough
@@ -145,8 +145,8 @@ INACTIVITY_VELOCITY_THRESHOLD = 0.5  # Minimum velocity magnitude to be "active"
 
 # Reward Shaping
 SHAPING_MODE = "delta"  # Simpler selection
-SHAPING_SCALE = 2.0
-SHAPING_CLIP = 1.5
+SHAPING_SCALE = 1.0
+SHAPING_CLIP = 0.5
 
 # Curriculum Learning
 CURRICULUM_ENABLED = True
