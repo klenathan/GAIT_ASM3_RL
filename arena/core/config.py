@@ -165,6 +165,10 @@ MODEL_SAVE_DIR = "./models"  # Deprecated: kept for reference only
 # STRUCTURED CONFIGURATIONS
 # ============================================================================
 
+# ============================================================================
+# STRUCTURED CONFIGURATIONS
+# ============================================================================
+
 
 @dataclass
 class TrainerConfig:
@@ -178,17 +182,10 @@ class TrainerConfig:
     render: bool = False
     progress_bar: bool = True
     checkpoint_freq: int = 50_000
-    save_replay_buffer: bool = False
-    save_vecnormalize: bool = True
-    runs_dir: str = RUNS_DIR  # Unified directory for models and logs
+    # Unified directory for models and logs
+    runs_dir: str = RUNS_DIR
     # Optional resume/transfer learning
     pretrained_model_path: Optional[str] = None
-    # Whether to reset timesteps in SB3 learn(); when resuming, typically False
-    reset_num_timesteps: bool = True
-    # Transfer learning fine-grained control
-    load_vecnormalize: bool = True  # Load VecNormalize stats if available
-    load_curriculum: bool = True  # Restore curriculum progress
-    load_replay_buffer: bool = True  # Load replay buffer (DQN only)
 
     # Learning rate schedule
     lr_schedule: str = "cosine"  # "constant", "linear", "exponential", "cosine"
@@ -196,104 +193,14 @@ class TrainerConfig:
     # Fraction of training for warmup (0 = none)
     lr_warmup_fraction: float = 0.0
 
-    # DQN specific
-    dqn_hidden_layers: List[int] = field(default_factory=lambda: [256, 128, 64])
-    dqn_activation: str = "SiLU"
-
-    # PPO specific
-    ppo_net_arch: Dict[str, List[int]] = field(
-        default_factory=lambda: dict(pi=[128, 64, 32], vf=[128, 64, 32])
-    )
-    ppo_activation: str = "SiLU"
-
-    # LSTM specific
-    ppo_lstm_net_arch: List[int] = field(default_factory=lambda: [128, 64])
-    ppo_lstm_hidden_size: int = 128
-    ppo_lstm_n_layers: int = 1
-
-    # A2C specific
-    a2c_net_arch: Dict[str, List[int]] = field(
-        default_factory=lambda: dict(
-            pi=[384, 256, 256, 128, 64], vf=[256, 128, 128, 64]
-        )
-    )
-    a2c_activation: str = "SiLU"
-
-
-@dataclass
-class DQNHyperparams:
-    learning_rate: float = 3e-4
-    buffer_size: int = 100_000
-    batch_size: int = 64
-    gamma: float = 0.99
-    exploration_fraction: float = 0.5
-    exploration_initial_eps: float = 1.0
-    exploration_final_eps: float = 0.05
-    target_update_interval: int = 1000
-    train_freq: int = 4
-    gradient_steps: int = 1
-    learning_starts: int = 1000
-    verbose: int = 1
-
-
-@dataclass
-class PPOHyperparams:
-    learning_rate: float = 5e-4
-    n_steps: int = 4096
-    batch_size: int = 64
-    n_epochs: int = 10
+    # Puffer PPO specific (moved from hardcoded in trainer)
+    learning_rate: float = 2.5e-4
     gamma: float = 0.99
     gae_lambda: float = 0.95
-    clip_range: float = 0.1
-    ent_coef: float = 0.05
-    vf_coef: float = 1.0
-    max_grad_norm: float = 0.5
-    target_kl: float = 0.03
-    verbose: int = 0
-
-
-@dataclass
-class A2CHyperparams:
-    learning_rate: float = 2.5e-4
-    n_steps: int = 128
-    gamma: float = 0.99
-    gae_lambda: float = 1.0
-    ent_coef: float = 0.05  # Higher entropy for better exploration
+    ent_coef: float = 0.01
     vf_coef: float = 0.5
     max_grad_norm: float = 0.5
-    rms_prop_eps: float = 1e-5
-    use_rms_prop: bool = True
-    normalize_advantage: bool = True  # Stabilizes training
-    verbose: int = 1
-
-
-@dataclass
-class PPOLSTMHyperparams(PPOHyperparams):
-    learning_rate: float = 1e-4
-    n_steps: int = 512
-    batch_size: int = 32
-    n_epochs: int = 5
-    gamma: float = 0.99
-    gae_lambda: float = 0.98
-    clip_range: float = 0.2
-    ent_coef: float = 0.05
-    vf_coef: float = 1.0
-    max_grad_norm: float = 0.5
-    target_kl: float = 0.03
-    verbose: int = 0
-
-
-# Default hyperparameter instances (equivalent to old config)
-DQN_DEFAULT = DQNHyperparams()
-DQN_GPU_DEFAULT = DQNHyperparams(
-    buffer_size=200_000, batch_size=256, gradient_steps=2, learning_starts=2000
-)
-
-PPO_DEFAULT = PPOHyperparams()
-PPO_GPU_DEFAULT = PPOHyperparams(batch_size=256)
-
-PPO_LSTM_DEFAULT = PPOLSTMHyperparams()
-PPO_LSTM_GPU_DEFAULT = PPOLSTMHyperparams(batch_size=64)
-
-A2C_DEFAULT = A2CHyperparams()
-A2C_GPU_DEFAULT = A2CHyperparams(n_steps=256)
+    clip_coef: float = 0.1
+    update_epochs: int = 4
+    num_minibatches: int = 4
+    num_steps: int = 128

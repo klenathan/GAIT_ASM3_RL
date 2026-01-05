@@ -5,9 +5,8 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "numpy>=2.3.5",
+    "numpy<2",
     "pygame>=2.6.1",
-    "stable-baselines3[extra]>=2.7.1",
     "tensorboard>=2.20.0",
     "matplotlib>=3.9.0",
     "pandas>=2.2.0",
@@ -17,8 +16,8 @@ dependencies = [
     "torch",
     "torchvision",
     "torchaudio",
-    "sb3-contrib>=2.7.1",
     "pygame-emojis>=0.2.0",
+    "pufferlib>=2.0.6",
 ]
 
 
