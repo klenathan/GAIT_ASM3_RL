@@ -97,12 +97,15 @@ class PufferPPOTrainer:
         # PufferLib is optimized for 1 worker per core, handling multiple envs per worker.
         num_workers = os.cpu_count() or 1
         
+        # Enable overwork to prevent crashes on Colab/Containers where os.cpu_count() > physical cores
+        # This allows using logical cores (vCPUs) even if PufferLib prefers physical cores.
         vec_env = pufferlib.vector.Multiprocessing(
             [make_puffer_env] * self.num_envs,
             [[] for _ in range(self.num_envs)],
             [{"config": self.config} for _ in range(self.num_envs)],
             self.num_envs,
             num_workers=num_workers,
+            overwork=True,
         )
 
         # Policy Network
