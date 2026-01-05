@@ -42,15 +42,23 @@ class PufferPPOTrainer:
         self.learning_rate = config.learning_rate
         
         # Smart default for num_envs based on device
-        if config.num_envs:
-            self.num_envs = config.num_envs
-        else:
-            if self.device == "cuda":
+        if self.device == "cuda":
+            # Force high parallelism on CUDA to utilize GPU, even if user requested less
+            if config.num_envs and config.num_envs < NUM_ENVS_DEFAULT_CUDA:
+                print(f"\n[WARNING] Requested {config.num_envs} envs on CUDA, which underutilizes the GPU.")
+                print(f"[INFO] Forcing num_envs to {NUM_ENVS_DEFAULT_CUDA} to maximize GPU throughput.")
                 self.num_envs = NUM_ENVS_DEFAULT_CUDA
-            elif self.device == "mps":
-                self.num_envs = NUM_ENVS_DEFAULT_MPS
+            elif config.num_envs:
+                self.num_envs = config.num_envs
             else:
-                self.num_envs = NUM_ENVS_DEFAULT_CPU
+                self.num_envs = NUM_ENVS_DEFAULT_CUDA
+        elif self.device == "mps":
+             if config.num_envs:
+                self.num_envs = config.num_envs
+             else:
+                self.num_envs = NUM_ENVS_DEFAULT_MPS
+        else:
+            self.num_envs = config.num_envs if config.num_envs else NUM_ENVS_DEFAULT_CPU
                 
         self.num_steps = config.num_steps
         self.anneal_lr = True
