@@ -17,7 +17,13 @@ import pufferlib.emulation
 import pufferlib.vector
 import pufferlib.models
 
-from arena.core.config import TrainerConfig
+from arena.core.config import (
+    TrainerConfig,
+    NUM_ENVS_DEFAULT_CUDA,
+    NUM_ENVS_DEFAULT_MPS,
+    NUM_ENVS_DEFAULT_CPU,
+)
+from arena.core.device import DeviceManager
 from arena.core.env_puffer import make_puffer_env
 from arena.training.registry import AlgorithmRegistry
 
@@ -26,16 +32,26 @@ from arena.training.registry import AlgorithmRegistry
 class PufferPPOTrainer:
     def __init__(self, config: TrainerConfig):
         self.config = config
-        self.device = torch.device(
-            config.device
-            if config.device != "auto"
-            else ("cuda" if torch.cuda.is_available() else "cpu")
-        )
+        
+        # Use DeviceManager for robust device selection and optimization
+        self.device = DeviceManager.get_device(config.device)
+        DeviceManager.setup_optimizations(self.device)
 
         # PPO Hyperparameters from config
         self.total_timesteps = config.total_timesteps
         self.learning_rate = config.learning_rate
-        self.num_envs = config.num_envs if config.num_envs else 4
+        
+        # Smart default for num_envs based on device
+        if config.num_envs:
+            self.num_envs = config.num_envs
+        else:
+            if self.device == "cuda":
+                self.num_envs = NUM_ENVS_DEFAULT_CUDA
+            elif self.device == "mps":
+                self.num_envs = NUM_ENVS_DEFAULT_MPS
+            else:
+                self.num_envs = NUM_ENVS_DEFAULT_CPU
+                
         self.num_steps = config.num_steps
         self.anneal_lr = True
         self.gamma = config.gamma
@@ -49,6 +65,9 @@ class PufferPPOTrainer:
         self.vf_coef = config.vf_coef
         self.max_grad_norm = config.max_grad_norm
         self.target_kl = None
+        
+        # Mixed Precision Training Scaler
+        self.scaler = torch.cuda.amp.GradScaler(enabled=(self.device == "cuda"))
 
         self.batch_size = int(self.num_envs * self.num_steps)
         self.minibatch_size = int(self.batch_size // self.num_minibatches)
@@ -192,61 +211,64 @@ class PufferPPOTrainer:
                     end = start + self.minibatch_size
                     mb_inds = b_inds[start:end]
 
-                    logits, newvalue = policy(b_obs[mb_inds])
-                    probs = torch.distributions.Categorical(logits=logits)
-                    newlogprob = probs.log_prob(
-                        b_actions[mb_inds].squeeze()
-                    )  # Squeeze if needed since actions might be (N, 1) or (N)
-                    entropy = probs.entropy()
+                    with torch.cuda.amp.autocast(enabled=(self.device == "cuda")):
+                        logits, newvalue = policy(b_obs[mb_inds])
+                        probs = torch.distributions.Categorical(logits=logits)
+                        newlogprob = probs.log_prob(
+                            b_actions[mb_inds].squeeze()
+                        )  # Squeeze if needed since actions might be (N, 1) or (N)
+                        entropy = probs.entropy()
 
-                    logratio = newlogprob - b_logprobs[mb_inds]
-                    ratio = logratio.exp()
+                        logratio = newlogprob - b_logprobs[mb_inds]
+                        ratio = logratio.exp()
 
-                    with torch.no_grad():
-                        # calculate approx_kl http://joschu.net/blog/kl-approx.html
-                        old_approx_kl = (-logratio).mean()
-                        approx_kl = ((ratio - 1) - logratio).mean()
-                        clipfracs += [
-                            ((ratio - 1.0).abs() > self.clip_coef).float().mean().item()
-                        ]
+                        with torch.no_grad():
+                            # calculate approx_kl http://joschu.net/blog/kl-approx.html
+                            old_approx_kl = (-logratio).mean()
+                            approx_kl = ((ratio - 1) - logratio).mean()
+                            clipfracs += [
+                                ((ratio - 1.0).abs() > self.clip_coef).float().mean().item()
+                            ]
 
-                    mb_advantages = b_advantages[mb_inds]
-                    if self.norm_adv:
-                        mb_advantages = (mb_advantages - mb_advantages.mean()) / (
-                            mb_advantages.std() + 1e-8
+                        mb_advantages = b_advantages[mb_inds]
+                        if self.norm_adv:
+                            mb_advantages = (mb_advantages - mb_advantages.mean()) / (
+                                mb_advantages.std() + 1e-8
+                            )
+
+                        # Policy loss
+                        pg_loss1 = -mb_advantages * ratio
+                        pg_loss2 = -mb_advantages * torch.clamp(
+                            ratio, 1 - self.clip_coef, 1 + self.clip_coef
                         )
+                        pg_loss = torch.max(pg_loss1, pg_loss2).mean()
 
-                    # Policy loss
-                    pg_loss1 = -mb_advantages * ratio
-                    pg_loss2 = -mb_advantages * torch.clamp(
-                        ratio, 1 - self.clip_coef, 1 + self.clip_coef
-                    )
-                    pg_loss = torch.max(pg_loss1, pg_loss2).mean()
+                        # Value loss
+                        newvalue = newvalue.view(-1)
+                        if self.clip_vloss:
+                            v_loss_unclipped = (newvalue - b_returns[mb_inds]) ** 2
+                            v_clipped = b_values[mb_inds] + torch.clamp(
+                                newvalue - b_values[mb_inds],
+                                -self.clip_coef,
+                                self.clip_coef,
+                            )
+                            v_loss_clipped = (v_clipped - b_returns[mb_inds]) ** 2
+                            v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
+                            v_loss = 0.5 * v_loss_max.mean()
+                        else:
+                            v_loss = 0.5 * ((newvalue - b_returns[mb_inds]) ** 2).mean()
 
-                    # Value loss
-                    newvalue = newvalue.view(-1)
-                    if self.clip_vloss:
-                        v_loss_unclipped = (newvalue - b_returns[mb_inds]) ** 2
-                        v_clipped = b_values[mb_inds] + torch.clamp(
-                            newvalue - b_values[mb_inds],
-                            -self.clip_coef,
-                            self.clip_coef,
+                        entropy_loss = entropy.mean()
+                        loss = (
+                            pg_loss - self.ent_coef * entropy_loss + v_loss * self.vf_coef
                         )
-                        v_loss_clipped = (v_clipped - b_returns[mb_inds]) ** 2
-                        v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
-                        v_loss = 0.5 * v_loss_max.mean()
-                    else:
-                        v_loss = 0.5 * ((newvalue - b_returns[mb_inds]) ** 2).mean()
-
-                    entropy_loss = entropy.mean()
-                    loss = (
-                        pg_loss - self.ent_coef * entropy_loss + v_loss * self.vf_coef
-                    )
 
                     optimizer.zero_grad()
-                    loss.backward()
+                    self.scaler.scale(loss).backward()
+                    self.scaler.unscale_(optimizer)
                     nn.utils.clip_grad_norm_(policy.parameters(), self.max_grad_norm)
-                    optimizer.step()
+                    self.scaler.step(optimizer)
+                    self.scaler.update()
 
             y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
             var_y = np.var(y_true)
