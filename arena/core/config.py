@@ -28,7 +28,7 @@ FPS = 60
 ACTION_SPACE_STYLE_1 = 5  # Rotation, Thrust, Shoot
 ACTION_SPACE_STYLE_2 = 6  # Directional (4), Shoot
 
-# Observation Space Layout (28 dims total):
+# Observation Space Layout (44 dims total):
 # [0-1]   Player position (x, y)
 # [2-3]   Player velocity (vx, vy)
 # [4]     Player rotation
@@ -41,10 +41,14 @@ ACTION_SPACE_STYLE_2 = 6  # Directional (4), Shoot
 # [13-15] Nearest enemy 2 (dist, angle, exists)
 # [16-19] Nearest spawner 1 (dist, angle, exists, health)
 # [20-23] Nearest spawner 2 (dist, angle, exists, health)
-# [24-26] Nearest projectile (dist, angle, count nearby)
-# [27-30] Wall distances (left, right, top, bottom)
-# [31]    Enemy count
-OBS_DIM = 32
+# [24-26] Nearest projectile 1 (dist, angle, exists)
+# [27-29] Nearest projectile 2 (dist, angle, exists)
+# [30-32] Nearest projectile 3 (dist, angle, exists)
+# [33-35] Nearest projectile 4 (dist, angle, exists)
+# [36-38] Nearest projectile 5 (dist, angle, exists)
+# [39-42] Wall distances (left, right, top, bottom)
+# [43]    Enemy count
+OBS_DIM = 44
 
 # Threat detection
 PROJECTILE_DANGER_RADIUS = 150  # Radius to count nearby projectiles
@@ -103,30 +107,29 @@ PROJECTILE_LIFETIME = 120
 
 # Phase System
 PHASE_CONFIG = [
-    {"spawners": 1, "enemy_speed_mult": 1.0, "spawn_rate_mult": 1.0},
-    {"spawners": 2, "enemy_speed_mult": 0.9, "spawn_rate_mult": 0.9},
-    {"spawners": 3, "enemy_speed_mult": 0.8, "spawn_rate_mult": 0.85},
-    {"spawners": 4, "enemy_speed_mult": 0.7, "spawn_rate_mult": 0.8},
-    {"spawners": 5, "enemy_speed_mult": 0.75, "spawn_rate_mult": 0.75},
+    {"spawners": 1, "enemy_speed_mult": 1.0, "spawn_rate_mult": 0.8},
+    {"spawners": 1, "enemy_speed_mult": 0.9, "spawn_rate_mult": 0.9},
+    {"spawners": 1, "enemy_speed_mult": 0.8, "spawn_rate_mult": 1.0},
+    {"spawners": 2, "enemy_speed_mult": 0.7, "spawn_rate_mult": 1.0},
+    {"spawners": 3, "enemy_speed_mult": 0.75, "spawn_rate_mult": 0.75},
 ]
 MAX_PHASES = len(PHASE_CONFIG)
 
 # Reward Structure
 MAX_STEPS = 3000
-STEP_REWARD = 0.1
 REWARD_ENEMY_DESTROYED = 5.0
 REWARD_SPAWNER_DESTROYED = 75.0
-REWARD_PHASE_COMPLETE = 100.0
+REWARD_PHASE_COMPLETE = 0 # 100.0
 REWARD_DAMAGE_TAKEN = -2.0
 REWARD_DEATH = -100.0
-REWARD_STEP_SURVIVAL = 0.01
+REWARD_STEP_SURVIVAL = -0.01
 REWARD_HIT_ENEMY = 2.0
-REWARD_HIT_SPAWNER = 10.0
+REWARD_HIT_SPAWNER = 2.0
 REWARD_SHOT_FIRED = 0.0
 REWARD_QUICK_SPAWNER_KILL = 50.0
 
 # Activity Penalties (discourage passive/corner-hiding play)
-PENALTY_INACTIVITY = -0.05          # Per-step penalty when not moving enough
+PENALTY_INACTIVITY = 0          # Per-step penalty when not moving enough
 PENALTY_CORNER = -0.1               # Per-step penalty when too close to edges
 CORNER_MARGIN = 80                  # Distance from edge to be considered "in corner"
 INACTIVITY_VELOCITY_THRESHOLD = 0.5  # Minimum velocity magnitude to be "active"
@@ -185,7 +188,7 @@ class TrainerConfig:
 
     # Learning rate schedule
     lr_schedule: str = "cosine"  # "constant", "linear", "exponential", "cosine"
-    lr_end: Optional[float] = 1e-6  # Final LR; defaults to start_lr * 0.1
+    lr_end: Optional[float] = 1e-5  # Final LR; defaults to start_lr * 0.1
     # Fraction of training for warmup (0 = none)
     lr_warmup_fraction: float = 0.0
 
@@ -228,7 +231,7 @@ class DQNHyperparams:
 
 @dataclass
 class PPOHyperparams:
-    learning_rate: float = 1e-4
+    learning_rate: float = 5e-4
     n_steps: int = 4096
     batch_size: int = 64
     n_epochs: int = 10

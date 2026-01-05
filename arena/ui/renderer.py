@@ -60,7 +60,7 @@ class ArenaRenderer:
             return
 
         emoji_size = (14, 14)
-        emoji_list = ['⚔️', '🎯', '💀', '❤️', '🚀', '📍', '🔄', '⏱️']
+        emoji_list = ['⚔️', '🎯', '💀', '❤️', '🚀', '📍', '🔄', '⏱️', '👾']
         for emoji in emoji_list:
             try:
                 self._emoji_cache[emoji] = load_emoji(emoji, emoji_size)
@@ -297,6 +297,10 @@ class ArenaRenderer:
                 x, y, "Cooldown", env.player.shoot_cooldown, available_width, emoji='⏱️')
             y += line_height + section_gap
 
+        # ═══ MODEL INPUTS SECTION (during evaluation) ═══
+        if not is_human and training_metrics.get('show_inputs', False):
+            y = self._draw_model_inputs_section(x, y, env, available_width, line_height, section_gap)
+
         # ═══ SYSTEM SECTION ═══
         y = self._draw_section_header(x, y, "SYSTEM", available_width)
         fps = int(self.clock.get_fps())
@@ -365,6 +369,92 @@ class ArenaRenderer:
         value_rect.right = value_x
         value_rect.top = y
         self.screen.blit(value_surface, value_rect)
+
+    def _draw_model_inputs_section(self, x, y, env, available_width, line_height, section_gap):
+        """Draw model inputs section showing what the agent observes."""
+        y = self._draw_section_header(x, y, "MODEL INPUTS", available_width)
+        
+        # Player state inputs
+        player_speed = np.linalg.norm(env.player.velocity)
+        self._draw_metric_row(
+            x, y, "Velocity", f"{player_speed:.2f}", available_width)
+        y += line_height
+        
+        rotation_deg = math.degrees(env.player.rotation) % 360
+        self._draw_metric_row(
+            x, y, "Rotation", f"{rotation_deg:.0f}°", available_width)
+        y += line_height
+        
+        cooldown_ratio = env.player.shoot_cooldown / config.PLAYER_SHOOT_COOLDOWN
+        self._draw_metric_row(
+            x, y, "Cooldown", f"{cooldown_ratio:.2f}", available_width)
+        y += line_height
+        
+        # Add small separator
+        y += 3
+        
+        # Get the k nearest entities
+        nearest_enemies = env._find_k_nearest_entities(env.enemies, k=2)
+        nearest_spawners = env._find_k_nearest_entities(env.spawners, k=2)
+        
+        # Display closest enemy info
+        for i, enemy in enumerate(nearest_enemies):
+            if enemy:
+                from arena.game import utils
+                dist = utils.distance(env.player.pos, enemy.pos)
+                angle = utils.angle_to_point(env.player.pos, enemy.pos)
+                angle_deg = math.degrees(angle) % 360
+                
+                label = f"Enemy {i+1} Dist" if i > 0 else "Enemy Dist"
+                self._draw_metric_row(
+                    x, y, label, f"{dist:.1f}", available_width, emoji='👾' if i == 0 else None)
+                y += line_height
+                
+                label = f"Enemy {i+1} Ang" if i > 0 else "Enemy Ang"
+                self._draw_metric_row(
+                    x, y, label, f"{angle_deg:.0f}°", available_width)
+                y += line_height
+            else:
+                # No enemy at this index
+                label = f"Enemy {i+1}" if i > 0 else "Enemy"
+                self._draw_metric_row(
+                    x, y, label, "None", available_width, value_color=(100, 100, 100))
+                y += line_height
+        
+        # Add small separator
+        y += 3
+        
+        # Display closest spawner info
+        for i, spawner in enumerate(nearest_spawners):
+            if spawner:
+                from arena.game import utils
+                dist = utils.distance(env.player.pos, spawner.pos)
+                angle = utils.angle_to_point(env.player.pos, spawner.pos)
+                angle_deg = math.degrees(angle) % 360
+                health_pct = int((spawner.health / spawner.max_health) * 100)
+                
+                label = f"Spawn {i+1} Dist" if i > 0 else "Spawn Dist"
+                self._draw_metric_row(
+                    x, y, label, f"{dist:.1f}", available_width, emoji='🎯' if i == 0 else None)
+                y += line_height
+                
+                label = f"Spawn {i+1} Ang" if i > 0 else "Spawn Ang"
+                self._draw_metric_row(
+                    x, y, label, f"{angle_deg:.0f}°", available_width)
+                y += line_height
+                
+                label = f"Spawn {i+1} HP" if i > 0 else "Spawn HP"
+                self._draw_metric_row(
+                    x, y, label, f"{health_pct}%", available_width)
+                y += line_height
+            else:
+                # No spawner at this index
+                label = f"Spawn {i+1}" if i > 0 else "Spawn"
+                self._draw_metric_row(
+                    x, y, label, "None", available_width, value_color=(100, 100, 100))
+                y += line_height
+        
+        return y + section_gap
 
     def _draw_action_section(self, x, y, available_width, line_height):
         """Draw action distribution section integrated into metrics panel."""
@@ -588,6 +678,9 @@ class ArenaRenderer:
             # Draw shooting angle indicator for Style 2
             if env.control_style == 2:
                 self._draw_shooting_angle(env.player.pos, env.player.rotation)
+            
+            # Draw aim lines to spawners showing actual angles needed
+            self._draw_aim_lines_to_spawners(env)
 
         for enemy in env.enemies:
             if enemy.alive:
@@ -687,13 +780,64 @@ class ArenaRenderer:
         pygame.draw.polygon(self.screen, color,
                             [(int(end_x), int(end_y)), left_point, right_point])
         
-        # Draw angle label
+        # Draw angle label with MORE PRECISION
         angle_deg = math.degrees(angle) % 360
-        angle_text = f"Shoot: {angle_deg:.0f}°"
+        angle_text = f"Shoot: {angle_deg:.2f}°"  # Show 2 decimal places
         text_surf = self.small_font.render(angle_text, True, color)
         text_x = int(scaled_pos[0] + math.cos(angle) * (arrow_length + self._s(15)))
         text_y = int(scaled_pos[1] + math.sin(angle) * (arrow_length + self._s(15)))
         self.screen.blit(text_surf, (text_x, text_y))
+    
+    def _draw_aim_lines_to_spawners(self, env):
+        """Draw lines from player to spawners showing required aim angles."""
+        from arena.game import utils
+        
+        if not env.player.alive:
+            return
+        
+        player_pos_scaled = self._spos(env.player.pos)
+        
+        for i, spawner in enumerate(env.spawners):
+            if not spawner.alive:
+                continue
+            
+            spawner_pos_scaled = self._spos(spawner.pos)
+            
+            # Calculate actual angle needed to hit this spawner
+            actual_angle = utils.angle_to_point(env.player.pos, spawner.pos)
+            
+            # Draw thin line to spawner (yellow)
+            pygame.draw.line(self.screen, (255, 255, 0, 128),
+                           player_pos_scaled, spawner_pos_scaled, 1)
+            
+            # Calculate angle difference from shooting angle
+            if env.control_style == 2:
+                angle_diff = actual_angle - env.player.rotation
+                # Normalize to -pi to pi
+                while angle_diff > math.pi:
+                    angle_diff -= 2 * math.pi
+                while angle_diff < -math.pi:
+                    angle_diff += 2 * math.pi
+                
+                # Draw angle info near the spawner
+                actual_deg = math.degrees(actual_angle) % 360
+                diff_deg = math.degrees(angle_diff)
+                shoot_deg = math.degrees(env.player.rotation) % 360
+                
+                info_text = f"Tgt:{actual_deg:.1f}° | Δ:{diff_deg:.1f}°"
+                text_surf = self.small_font.render(info_text, True, (255, 255, 100))
+                text_pos = (int(spawner_pos_scaled[0] - 60), 
+                          int(spawner_pos_scaled[1] - self._s(spawner.radius + 50)))
+                
+                # Draw background for text
+                bg_rect = text_surf.get_rect()
+                bg_rect.topleft = text_pos
+                bg_surface = pygame.Surface((bg_rect.width + 4, bg_rect.height + 2))
+                bg_surface.set_alpha(200)
+                bg_surface.fill((0, 0, 0))
+                self.screen.blit(bg_surface, (text_pos[0] - 2, text_pos[1] - 1))
+                
+                self.screen.blit(text_surf, text_pos)
 
     def _draw_debug_line(self, x, y, label, value):
         """Draw a single debug info line."""

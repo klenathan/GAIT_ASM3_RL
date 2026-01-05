@@ -37,8 +37,10 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 from arena.training.registry import AlgorithmRegistry
 from arena.training.algorithms import dqn, ppo, ppo_lstm, ppo_dict, a2c  # noqa: F401 - Import to register algorithms
+from arena.training.training_state import find_training_state
 from arena.core.environment_dict import ArenaDictEnv
 from arena.core.environment import ArenaEnv
+from arena.core.curriculum import CurriculumManager, CurriculumConfig
 from arena.core.device import DeviceManager
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
@@ -270,13 +272,30 @@ class HeadlessEvaluator:
                     continue
             raise ValueError(f"Failed to load model from {model_path}: {e}")
     
-    def _create_env(self, style: int, algo: str, vecnorm_path: Optional[str] = None):
-        """Create environment with VecNormalize if available."""
+    def _create_env(self, style: int, algo: str, vecnorm_path: Optional[str] = None, 
+                    curriculum_stage: Optional[int] = None):
+        """Create environment with VecNormalize if available.
+        
+        Args:
+            style: Control style (1 or 2)
+            algo: Algorithm type
+            vecnorm_path: Path to VecNormalize stats
+            curriculum_stage: If specified, apply curriculum modifiers from this stage.
+                              None means no curriculum (full difficulty).
+        """
+        # Create curriculum manager if stage specified
+        curriculum_manager = None
+        if curriculum_stage is not None:
+            curriculum_manager = CurriculumManager(CurriculumConfig(enabled=True))
+            curriculum_manager.current_stage_index = curriculum_stage
+            self._log(f"[OK] Using curriculum stage {curriculum_stage}: {curriculum_manager.current_stage.name}")
+        
         # Use appropriate environment for algorithm
         if algo == "ppo_dict":
             base_env = ArenaDictEnv(control_style=style, render_mode=None)
         else:
-            base_env = ArenaEnv(control_style=style, render_mode=None)
+            base_env = ArenaEnv(control_style=style, render_mode=None, 
+                               curriculum_manager=curriculum_manager)
         
         # Wrap in DummyVecEnv
         vec_env = DummyVecEnv([lambda: base_env])
@@ -374,7 +393,9 @@ class HeadlessEvaluator:
         num_episodes: int = 100,
         deterministic: bool = True,
         algo: Optional[str] = None,
-        save_episodes: bool = False
+        save_episodes: bool = False,
+        curriculum_stage: Optional[int] = None,
+        auto_curriculum: bool = False
     ) -> ModelEvaluation:
         """
         Evaluate a model over multiple episodes.
@@ -386,6 +407,8 @@ class HeadlessEvaluator:
             deterministic: Use deterministic policy
             algo: Algorithm type (auto-detected if None)
             save_episodes: Whether to include raw episode data in results
+            curriculum_stage: Curriculum stage to use (0-5). None means no curriculum (full difficulty).
+            auto_curriculum: If True, auto-detect curriculum stage from training state file.
         
         Returns:
             ModelEvaluation with comprehensive statistics
@@ -402,6 +425,16 @@ class HeadlessEvaluator:
         model, algo, is_recurrent = self._load_model(model_path, algo)
         self._log(f"[OK] Loaded {algo} model (Recurrent: {is_recurrent})")
         
+        # Auto-detect curriculum stage from training state if requested
+        effective_curriculum_stage = curriculum_stage
+        if auto_curriculum and curriculum_stage is None:
+            training_state = find_training_state(model_path)
+            if training_state:
+                effective_curriculum_stage = training_state.curriculum_stage_index
+                self._log(f"[OK] Auto-detected curriculum stage: {effective_curriculum_stage}")
+            else:
+                self._log("⚠ No training state found, using full difficulty (no curriculum)")
+        
         # Find and load VecNormalize stats
         vecnorm_path = self._find_vecnormalize_stats(model_path)
         if vecnorm_path:
@@ -409,8 +442,8 @@ class HeadlessEvaluator:
         else:
             self._log("⚠ WARNING: No VecNormalize stats found!")
         
-        # Create environment
-        env, has_vecnorm = self._create_env(style, algo, vecnorm_path)
+        # Create environment with curriculum stage if specified
+        env, has_vecnorm = self._create_env(style, algo, vecnorm_path, effective_curriculum_stage)
         self._log(f"[OK] Environment created (VecNormalize: {has_vecnorm})")
         
         # Run episodes
@@ -659,6 +692,12 @@ def main():
     parser.add_argument('--device', type=str, default='auto', help='Device to use (auto/cpu/cuda)')
     parser.add_argument('--workers', type=int, default=1, help='Number of parallel workers (default: 1)')
     
+    # Curriculum options
+    parser.add_argument('--curriculum-stage', type=int, default=None, choices=[0, 1, 2, 3, 4, 5],
+                       help='Curriculum stage (0-5). None=full difficulty. Auto-detect with --auto-curriculum.')
+    parser.add_argument('--auto-curriculum', action='store_true',
+                       help='Auto-detect curriculum stage from training state file')
+    
     args = parser.parse_args()
     
     # Collect model paths
@@ -701,7 +740,9 @@ def main():
                 num_episodes=args.episodes,
                 deterministic=not args.stochastic,
                 algo=args.algo,
-                save_episodes=args.save_episodes
+                save_episodes=args.save_episodes,
+                curriculum_stage=args.curriculum_stage,
+                auto_curriculum=args.auto_curriculum
             )
             evaluations.append(eval_result)
             
