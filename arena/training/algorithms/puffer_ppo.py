@@ -84,6 +84,14 @@ class PufferPPOTrainer:
         self.writer = SummaryWriter(self.log_path)
 
         print(f"Initializing PufferPPOTrainer on {self.device} with {self.num_envs} envs")
+        
+        # Warning for CPU bottleneck
+        num_workers = os.cpu_count() or 1
+        envs_per_worker = self.num_envs / num_workers
+        if envs_per_worker > 300:
+            print(f"\n[WARNING] High load per CPU core: {int(envs_per_worker)} envs/worker.")
+            print(f"          Training might appear frozen due to CPU bottleneck.")
+            print(f"          Recommended: Reduce --num-envs to {num_workers * 200} or less for this machine.\n")
 
     def train(self):
         # Vectorization
@@ -161,6 +169,11 @@ class PufferPPOTrainer:
                 # Execute game step
                 # PufferLib vector clients expect numpy actions
                 cpu_action = action.cpu().numpy()
+                
+                # Debug print for first few steps to confirm liveness
+                if global_step < self.num_envs * 5:
+                    print(f"Debug: Executing step {step} (Global: {global_step})...", end="\r")
+                
                 next_obs, reward, done, truncated, info = vec_env.step(cpu_action)
 
                 rewards[step] = torch.tensor(reward).to(self.device).view(-1)
