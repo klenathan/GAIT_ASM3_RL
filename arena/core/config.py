@@ -113,17 +113,17 @@ MAX_PHASES = len(PHASE_CONFIG)
 
 # Reward Structure
 MAX_STEPS = 3000
-STEP_REWARD = 0.1
-REWARD_ENEMY_DESTROYED = 5.0
-REWARD_SPAWNER_DESTROYED = 75.0
-REWARD_PHASE_COMPLETE = 100.0
+
+REWARD_SPAWNER_DESTROYED = 100.0
+REWARD_PHASE_COMPLETE = 0.0
 REWARD_DAMAGE_TAKEN = -2.0
 REWARD_DEATH = -100.0
-REWARD_STEP_SURVIVAL = 0.01
+REWARD_STEP_SURVIVAL = -0.01
 REWARD_HIT_ENEMY = 2.0
-REWARD_HIT_SPAWNER = 10.0
+REWARD_HIT_SPAWNER = 1.0
+REWARD_ENEMY_DESTROYED = 50.0
 REWARD_SHOT_FIRED = 0.0
-REWARD_QUICK_SPAWNER_KILL = 50.0
+REWARD_QUICK_SPAWNER_KILL = 10.0
 
 # Activity Penalties (discourage passive/corner-hiding play)
 PENALTY_INACTIVITY = -0.05          # Per-step penalty when not moving enough
@@ -138,6 +138,8 @@ SHAPING_CLIP = 0.2
 
 # Curriculum Learning
 CURRICULUM_ENABLED = True
+CURRICULUM_MODE = "auto"  # "manual" or "auto"
+AUTO_CURRICULUM_STAGES = 10  # Number of stages for automated curriculum
 CURRICULUM_ADVANCEMENT_THRESHOLD = 1  # Spawner kill rate to advance
 CURRICULUM_MIN_EPISODES = 100            # Min episodes before advancing
 CURRICULUM_WINDOW = 100                 # Episodes for averaging

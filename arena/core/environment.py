@@ -172,7 +172,7 @@ class ArenaEnv(gym.Env):
 
         reward += self._handle_collisions()
         reward += float(config.REWARD_STEP_SURVIVAL)
-        reward += self._calculate_shaping_reward()
+        # reward += self._calculate_shaping_reward()
 
         self.enemies = [e for e in self.enemies if e.alive]
         self.spawners = [s for s in self.spawners if s.alive]

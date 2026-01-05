@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import List, Optional, Callable
 import numpy as np
+from arena.core import config
 
 
 # =============================================================================
@@ -228,12 +229,57 @@ class CurriculumConfig:
 
     def __post_init__(self):
         if not self.stages:
-            self.stages = get_default_stages()
+            if config.CURRICULUM_MODE == "auto":
+                self.stages = get_auto_stages(config.AUTO_CURRICULUM_STAGES)
+            else:
+                self.stages = get_manual_stages()
         # Note: strategy will be set by CurriculumManager to use StageBasedStrategy
 
 
-def get_default_stages() -> List[CurriculumStage]:
-    """Return default 5-stage curriculum progression with gradually increasing difficulty."""
+def get_auto_stages(num_stages: int = 10) -> List[CurriculumStage]:
+    """Generate automated curriculum stages by interpolating difficulty."""
+    stages = []
+
+    # Difficulty parameters (Start -> End)
+    # Start: Very easy, slow enemies, high guidance
+    # End: Full difficulty, fast enemies, no guidance
+
+    for i in range(num_stages):
+        progress = i / (num_stages - 1) if num_stages > 1 else 1.0
+
+        # Interpolate parameters
+        spawn_cooldown = 3.0 - (2.0 * progress)      # 3.0 -> 1.0
+        max_enemies = 0.2 + (0.8 * progress)         # 0.2 -> 1.0
+        spawner_health = 0.3 + (0.7 * progress)      # 0.3 -> 1.0
+        enemy_speed = 0.2 + (0.8 * progress)         # 0.2 -> 1.0
+        shaping_scale = 4.0 - (3.5 * progress)       # 4.0 -> 0.5
+        damage_penalty = 0.1 + (0.9 * progress)      # 0.1 -> 1.0
+
+        # Advancement criteria (Start -> End)
+        min_spawner_kills = 0.1 + (2.9 * progress)   # 0.1 -> 3.0
+        min_win_rate = 0.0 + (0.6 * progress)        # 0.0 -> 0.6
+        min_enemy_kills = 0.0 + (15.0 * progress)    # 0.0 -> 15.0
+
+        stages.append(CurriculumStage(
+            name=f"Auto Stage {i+1}/{num_stages}",
+            spawn_cooldown_mult=spawn_cooldown,
+            max_enemies_mult=max_enemies,
+            spawner_health_mult=spawner_health,
+            enemy_speed_mult=enemy_speed,
+            shaping_scale_mult=shaping_scale,
+            damage_penalty_mult=damage_penalty,
+            min_spawner_kill_rate=min_spawner_kills,
+            min_win_rate=min_win_rate,
+            min_enemy_kill_rate=min_enemy_kills,
+            min_survival_steps=400 + int(200 * progress),
+            min_episodes=50 + int(50 * progress)
+        ))
+
+    return stages
+
+
+def get_manual_stages() -> List[CurriculumStage]:
+    """Return default handcrafted curriculum progression."""
     return [
         # Grade 1: Survival Basics
         # Behavior Focus: Basic movement, staying alive, avoiding damage
