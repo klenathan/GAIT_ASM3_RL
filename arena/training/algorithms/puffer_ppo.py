@@ -75,7 +75,10 @@ class PufferPPOTrainer:
         self.target_kl = None
         
         # Mixed Precision Training Scaler
-        self.scaler = torch.cuda.amp.GradScaler(enabled=(self.device == "cuda"))
+        if self.device == "cuda":
+            self.scaler = torch.amp.GradScaler("cuda")
+        else:
+            self.scaler = torch.cuda.amp.GradScaler(enabled=False)
 
         self.batch_size = int(self.num_envs * self.num_steps)
         self.minibatch_size = int(self.batch_size // self.num_minibatches)
@@ -89,12 +92,17 @@ class PufferPPOTrainer:
     def train(self):
         # Vectorization
         # PufferLib v3: Multiprocessing(env_creators, env_args, env_kwargs, num_envs, num_workers=...)
+        
+        # Limit num_workers to cpu_count to avoid "num_workers > hardware cores" error
+        # PufferLib is optimized for 1 worker per core, handling multiple envs per worker.
+        num_workers = os.cpu_count() or 1
+        
         vec_env = pufferlib.vector.Multiprocessing(
             [make_puffer_env] * self.num_envs,
             [[] for _ in range(self.num_envs)],
             [{"config": self.config} for _ in range(self.num_envs)],
             self.num_envs,
-            num_workers=self.num_envs,
+            num_workers=num_workers,
         )
 
         # Policy Network
