@@ -298,7 +298,7 @@ class ArenaRenderer:
             y += line_height + section_gap
 
         # ═══ MODEL INPUTS SECTION (during evaluation) ═══
-        if not is_human and training_metrics.get('show_inputs', False):
+        if not is_human and metrics.get('show_inputs', False):
             y = self._draw_model_inputs_section(x, y, env, available_width, line_height, section_gap)
 
         # ═══ SYSTEM SECTION ═══

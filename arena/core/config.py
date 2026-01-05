@@ -109,9 +109,9 @@ PROJECTILE_LIFETIME = 120
 PHASE_CONFIG = [
     {"spawners": 1, "enemy_speed_mult": 1.0, "spawn_rate_mult": 0.8},
     {"spawners": 1, "enemy_speed_mult": 0.9, "spawn_rate_mult": 0.9},
-    {"spawners": 1, "enemy_speed_mult": 0.8, "spawn_rate_mult": 1.0},
-    {"spawners": 2, "enemy_speed_mult": 0.7, "spawn_rate_mult": 1.0},
-    {"spawners": 3, "enemy_speed_mult": 0.75, "spawn_rate_mult": 0.75},
+    {"spawners": 2, "enemy_speed_mult": 0.8, "spawn_rate_mult": 0.3},
+    {"spawners": 3, "enemy_speed_mult": 0.7, "spawn_rate_mult": 0.2},
+    {"spawners": 4, "enemy_speed_mult": 0.75, "spawn_rate_mult": 0.1},
 ]
 MAX_PHASES = len(PHASE_CONFIG)
 
