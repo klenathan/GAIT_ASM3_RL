@@ -28,37 +28,15 @@ FPS = 60
 ACTION_SPACE_STYLE_1 = 5  # Rotation, Thrust, Shoot
 ACTION_SPACE_STYLE_2 = 6  # Directional (4), Shoot
 
-<<<<<<< HEAD
-# Observation Space Layout (44 dims total) - Agent-Relative Coordinates:
-# [0]     Distance from arena center (normalized to max_dist)
-# [1]     Angle to arena center (normalized 0-1 from -π to π)
-# [2]     Velocity magnitude (speed, normalized to max velocity)
-# [3]     Velocity direction angle (absolute world angle, normalized 0-1)
-# [4]     Player rotation (normalized)
-=======
 # Observation Space Layout (44 dims total):
 # [0-1]   Player position (x, y)
 # [2-3]   Player velocity (vx, vy)
 # [4]     Player rotation
->>>>>>> origin/main
 # [5]     Player health ratio
 # [6]     Shoot cooldown ratio (0 = ready)
 # [7]     Current phase ratio
 # [8]     Spawners remaining ratio
 # [9]     Time remaining ratio
-<<<<<<< HEAD
-# [10-12] Nearest enemy 1 (dist, angle relative to player rotation, exists)
-# [13-15] Nearest enemy 2 (dist, angle relative to player rotation, exists)
-# [16-19] Nearest spawner 1 (dist, angle relative to player rotation, exists, health)
-# [20-23] Nearest spawner 2 (dist, angle relative to player rotation, exists, health)
-# [24-26] Nearest projectile 1 (dist, angle relative to player rotation, exists)
-# [27-29] Nearest projectile 2 (dist, angle relative to player rotation, exists)
-# [30-32] Nearest projectile 3 (dist, angle relative to player rotation, exists)
-# [33-35] Nearest projectile 4 (dist, angle relative to player rotation, exists)
-# [36-38] Nearest projectile 5 (dist, angle relative to player rotation, exists)
-# [39-42] Wall distances (left, right, top, bottom) - distance-based
-# [43]    Enemy count (normalized)
-=======
 # [10-12] Nearest enemy 1 (dist, angle, exists)
 # [13-15] Nearest enemy 2 (dist, angle, exists)
 # [16-19] Nearest spawner 1 (dist, angle, exists, health)
@@ -70,7 +48,6 @@ ACTION_SPACE_STYLE_2 = 6  # Directional (4), Shoot
 # [36-38] Nearest projectile 5 (dist, angle, exists)
 # [39-42] Wall distances (left, right, top, bottom)
 # [43]    Enemy count
->>>>>>> origin/main
 OBS_DIM = 44
 
 # Threat detection
