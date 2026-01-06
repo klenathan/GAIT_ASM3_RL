@@ -3,7 +3,7 @@ Deep RL Arena - Gym Environment.
 Main environment implementing the Gym API with dual control schemes.
 """
 
-from arena.ui.renderer import ArenaRenderer
+# from arena.ui.renderer import ArenaRenderer
 from arena.game.entities import Player, Enemy, Spawner, Projectile
 from arena.game import utils
 from arena.core.curriculum import CurriculumManager, CurriculumStage
@@ -50,6 +50,7 @@ class ArenaEnv(gym.Env):
         self.renderer = None
         self._owns_renderer = False
         if render_mode == "human":
+            from arena.ui.renderer import ArenaRenderer
             self.renderer = ArenaRenderer()
             self._owns_renderer = True
 
@@ -213,6 +214,7 @@ class ArenaEnv(gym.Env):
         if self.render_mode is None:
             return
         if self.renderer is None and self.render_mode == "human":
+            from arena.ui.renderer import ArenaRenderer
             self.renderer = ArenaRenderer()
 
         if self.renderer:
