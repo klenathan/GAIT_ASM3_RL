@@ -266,9 +266,12 @@ def objective(trial: optuna.Trial):
     run_name = f"optuna_{algo}_style{style}_trial_{trial.number}"
 
     # Determine timesteps
-    timesteps = 200_000
-    if args.test:
+    if args.steps is not None:
+        timesteps = args.steps
+    elif args.test:
         timesteps = 2048
+    else:
+        timesteps = 200_000
 
     config = TrainerConfig(
         algo=algo,
@@ -360,6 +363,12 @@ def main():
     )
     parser.add_argument(
         "--test", action="store_true", help="Run in test mode (fast, minimal steps)"
+    )
+    parser.add_argument(
+        "--steps",
+        type=int,
+        default=None,
+        help="Total timesteps for training (default: 200000, or 2048 if --test)",
     )
     parser.add_argument(
         "--device",
