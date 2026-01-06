@@ -163,7 +163,7 @@ SHAPING_CLIP = 0.2
 # Control Style 2 specific: Firing line alignment reward scaling
 # This reward helps the agent position itself to align with spawners (since rotation is fixed)
 STYLE2_ALIGNMENT_SCALE = (
-    0.02  # Scale factor for alignment reward (tuned to be subtle but effective)
+    0.08  # Boosted for faster learning (was 0.02) - reduce after first wins
 )
 
 # Curriculum Learning
@@ -271,7 +271,7 @@ class PPOHyperparams:
     gamma: float = 0.99
     gae_lambda: float = 0.95
     clip_range: float = 0.1
-    ent_coef: float = 0.05
+    ent_coef: float = 0.10  # Increased for more exploration (was 0.05)
     vf_coef: float = 1.0
     max_grad_norm: float = 0.5
     target_kl: float = 0.03
