@@ -87,6 +87,7 @@ class ArenaEnv(gym.Env):
         self._prev_spawner_total_health = None
         self._prev_enemy_count = None
         self._prev_player_health = None
+        self._prev_spawner_dist = None  # For proximity reward tracking
         self.phase_start_step = 0
 
     @property
@@ -114,6 +115,7 @@ class ArenaEnv(gym.Env):
         self._prev_spawner_total_health = None
         self._prev_enemy_count = None
         self._prev_player_health = None
+        self._prev_spawner_dist = None  # For proximity reward tracking
 
         self.player = Player(config.GAME_WIDTH / 2, config.GAME_HEIGHT / 2)
 
@@ -626,6 +628,9 @@ class ArenaEnv(gym.Env):
         if self.control_style == 2:
             style2_alignment_reward = self._calculate_style2_alignment_reward()
 
+        # Spawner Proximity Reward (helps agent learn to approach spawners)
+        proximity_reward = self._calculate_proximity_reward()
+
         # Update trackers
         self._prev_spawner_total_health = current_spawner_health
         self._prev_enemy_count = len([e for e in self.enemies if e.alive])
@@ -637,8 +642,48 @@ class ArenaEnv(gym.Env):
             shaping_scale *= self.curriculum_stage.shaping_scale_mult
 
         # Normalize and scale
-        reward = (efficiency * shaping_scale * 0.01) + style2_alignment_reward
+        reward = (
+            (efficiency * shaping_scale * 0.01)
+            + style2_alignment_reward
+            + proximity_reward
+        )
         return float(np.clip(reward, -config.SHAPING_CLIP, config.SHAPING_CLIP))
+
+    def _calculate_proximity_reward(self):
+        """
+        Reward for moving closer to nearest spawner.
+        Helps agent learn to approach spawners, especially in early curriculum stages.
+        """
+        if not self.spawners:
+            return 0.0
+
+        # Find nearest alive spawner
+        alive_spawners = [s for s in self.spawners if s.alive]
+        if not alive_spawners:
+            return 0.0
+
+        nearest_spawner = min(
+            alive_spawners, key=lambda s: utils.distance(self.player.pos, s.pos)
+        )
+        current_dist = utils.distance(self.player.pos, nearest_spawner.pos)
+
+        # Initialize tracker on first call or if None
+        if self._prev_spawner_dist is None:
+            self._prev_spawner_dist = current_dist
+            return 0.0
+
+        # Calculate distance change (negative = getting closer = good!)
+        delta_dist = current_dist - self._prev_spawner_dist
+
+        # Reward for getting closer, penalty for moving away
+        # Scale: 0.002 per pixel change (small but meaningful)
+        proximity_reward = -delta_dist * 0.002
+
+        # Update tracker
+        self._prev_spawner_dist = current_dist
+
+        # Clip to prevent extreme values
+        return float(np.clip(proximity_reward, -0.05, 0.05))
 
     def _calculate_style2_alignment_reward(self):
         """
