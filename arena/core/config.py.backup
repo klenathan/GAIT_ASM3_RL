@@ -115,39 +115,18 @@ PHASE_CONFIG = [
 ]
 MAX_PHASES = len(PHASE_CONFIG)
 
-# Reward Structure - Option B: Aggressive Optimization for Maximum Win Rate
+# Reward Structure
 MAX_STEPS = 3000
-
-# Primary Objective: WINNING
-REWARD_WIN = 500.0  # NEW! Massive reward for completing all phases
-
-# Phase Progression: Critical Milestones
-REWARD_PHASE_COMPLETE = 50.0  # Substantial reward for each phase completion
-
-# Combat Rewards: Balanced spawner/enemy priorities
-REWARD_SPAWNER_DESTROYED = 40.0  # Primary objective (reduced from 50 to balance)
-REWARD_ENEMY_DESTROYED = 5.0  # Significant value (was 0.5, now more important)
-REWARD_HIT_SPAWNER = 6.0  # Damage feedback (reduced from 8)
-REWARD_HIT_ENEMY = 2.0  # Encourage enemy management (was 0.5)
-
-# Quick Kill Bonus: Phase-Aware (implemented in environment)
-REWARD_QUICK_KILL_BASE = 20.0  # Base quick-kill reward
-REWARD_QUICK_KILL_PHASE_MULTIPLIERS = [1.0, 1.2, 1.5, 2.0, 3.0]  # Per phase scaling
-REWARD_QUICK_KILL_TIME_THRESHOLD = 500  # Steps threshold for "quick"
-
-# Health Management: Explicit survival incentives (NEW!)
-REWARD_HEALTH_THRESHOLD_HIGH = 5.0  # Bonus if completing phase with >80% HP
-REWARD_HEALTH_THRESHOLD_MED = 2.0  # Bonus if completing phase with >50% HP
-REWARD_HEALTH_HIGH_THRESHOLD = 0.8  # 80% health threshold
-REWARD_HEALTH_MED_THRESHOLD = 0.5  # 50% health threshold
-
-# Penalties: Stronger avoidance signals
-REWARD_DEATH = -200.0  # Make death very costly (was -100)
-REWARD_DAMAGE_TAKEN = -5.0  # Stronger damage avoidance (was -3)
-REWARD_STEP_SURVIVAL = -0.02  # Moderate time pressure (was -0.01)
-
-# Other
+REWARD_ENEMY_DESTROYED = 0.5
+REWARD_SPAWNER_DESTROYED = 50.0
+REWARD_PHASE_COMPLETE = 0
+REWARD_DAMAGE_TAKEN = -3.0
+REWARD_DEATH = -100.0
+REWARD_STEP_SURVIVAL = -0.01
+REWARD_HIT_ENEMY = 0.5
+REWARD_HIT_SPAWNER = 8.0
 REWARD_SHOT_FIRED = 0.0
+REWARD_QUICK_SPAWNER_KILL = 50.0
 
 # Activity Penalties (discourage passive/corner-hiding play)
 PENALTY_INACTIVITY = 0  # Per-step penalty when not moving enough
