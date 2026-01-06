@@ -240,7 +240,12 @@ class ArenaEnv(gym.Env):
             self.sound_manager.play("player_death")
             done = True
 
-        if self.current_step >= config.MAX_STEPS:
+        # Check episode step limit (use curriculum override if specified)
+        max_steps = config.MAX_STEPS
+        if self.curriculum_stage and self.curriculum_stage.max_episode_steps:
+            max_steps = self.curriculum_stage.max_episode_steps
+
+        if self.current_step >= max_steps:
             done = True
 
         self.episode_reward += reward
@@ -281,8 +286,19 @@ class ArenaEnv(gym.Env):
         num = phase_cfg["spawners"]
         self.enemies = []
 
+        # Check if curriculum stage specifies fixed spawner positions
+        fixed_positions = None
+        if self.curriculum_stage and self.curriculum_stage.fixed_spawner_positions:
+            fixed_positions = self.curriculum_stage.fixed_spawner_positions
+            # Override num spawners if fixed positions specified
+            num = len(fixed_positions)
+
         for i in range(num):
-            x, y = self._get_spawner_position_smart(i, num)
+            # Use fixed position if provided, otherwise generate randomly
+            if fixed_positions:
+                x, y = fixed_positions[i]
+            else:
+                x, y = self._get_spawner_position_smart(i, num)
 
             # Apply curriculum modifiers to spawner
             spawn_rate_mult = phase_cfg["spawn_rate_mult"]

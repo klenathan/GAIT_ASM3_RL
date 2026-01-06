@@ -125,7 +125,7 @@ REWARD_WIN = 500.0  # NEW! Massive reward for completing all phases
 REWARD_PHASE_COMPLETE = 50.0  # Substantial reward for each phase completion
 
 # Combat Rewards: Balanced spawner/enemy priorities
-REWARD_SPAWNER_DESTROYED = 40.0  # Primary objective (reduced from 50 to balance)
+REWARD_SPAWNER_DESTROYED = 400.0  # 10× BOOSTED for GROKKING! (was 40)
 REWARD_ENEMY_DESTROYED = 5.0  # Significant value (was 0.5, now more important)
 REWARD_HIT_SPAWNER = 6.0  # Damage feedback (reduced from 8)
 REWARD_HIT_ENEMY = 2.0  # Encourage enemy management (was 0.5)

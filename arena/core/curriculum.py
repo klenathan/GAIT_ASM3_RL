@@ -171,6 +171,12 @@ class CurriculumStage:
     shaping_scale_mult: float = 1.0  # Higher = stronger guidance
     damage_penalty_mult: float = 1.0  # Higher = more severe damage penalties
 
+    # Overfit training options
+    fixed_spawner_positions: Optional[List[tuple]] = (
+        None  # [(x, y), ...] or None for random
+    )
+    max_episode_steps: Optional[int] = None  # Override MAX_STEPS, None = use default
+
     # Advancement criteria (configurable per stage)
     min_spawner_kill_rate: float = 0.3  # Required avg spawner kills per episode
     min_win_rate: float = 0.0  # Required win rate to advance
@@ -260,20 +266,47 @@ class CurriculumConfig:
 
 def get_default_stages() -> List[CurriculumStage]:
     """
-    Return default 8-stage curriculum with ultra-granular spawner-first strategy.
+    Return default 9-stage curriculum with OVERFIT-FIRST strategy.
 
-    Strategy - ULTRA GRANULAR teaching progression:
-    - Grade 1: Approach spawner (just get close, very easy spawner)
-    - Grade 2: Damage spawner (hit it a few times, easy)
-    - Grade 3: Kill 1 spawner (first full kill, moderate)
-    - Grade 4: Kill multiple spawners (1.5+, getting efficient)
-    - Grade 5: Introduce weak enemies (slow spawns, maintain spawner focus)
-    - Grade 6: More enemies, faster kills
-    - Grade 7: High enemy density
-    - Grade 8: Elite performance (full difficulty)
+    Strategy - GROKKING RECIPE (Overfit to Win, Then Generalize):
+    - Grade 0: **OVERFIT: Single Fixed Spawner** (master ONE scenario completely)
+    - Grade 1: Random Positions (transfer to variable scenarios)
+    - Grade 2: Approach spawner (just get close, very easy spawner)
+    - Grade 3: Damage spawner (hit it a few times, easy)
+    - Grade 4: Kill 1 spawner (first full kill, moderate)
+    - Grade 5: Kill multiple spawners (1.5+, getting efficient)
+    - Grade 6: Introduce weak enemies (slow spawns, maintain spawner focus)
+    - Grade 7: More enemies, faster kills
+    - Grade 8: High enemy density
+    - Grade 9: Elite performance (full difficulty)
     """
     return [
-        # Grade 1: APPROACH SPAWNER (Ultra Basics)
+        # =====================================================================
+        # GRADE 0: OVERFIT TO SINGLE SPAWNER (NEW!)
+        # =====================================================================
+        # PHILOSOPHY: Make the SIMPLEST possible task and OVERFIT completely
+        # Agent will learn: approach → aim → shoot → kill on ONE fixed scenario
+        # Expected: 95%+ kill rate within 1-2M steps (guaranteed learning!)
+        CurriculumStage(
+            name="Grade 0: OVERFIT Single Spawner",
+            spawn_cooldown_mult=999.0,  # NO enemy spawning
+            max_enemies_mult=0.0,  # NO ENEMIES AT ALL
+            spawner_health_mult=0.15,  # ULTRA WEAK (15 HP = 1.5 shots!)
+            enemy_speed_mult=0.5,  # N/A
+            shaping_scale_mult=15.0,  # MAXIMUM GUIDANCE (15× all shaping rewards!)
+            damage_penalty_mult=0.2,  # Very low penalty - encourage exploration
+            # FIXED POSITION: Always spawn at center of arena
+            fixed_spawner_positions=[(800, 640)],  # Single spawner at center
+            max_episode_steps=5000,  # More time to learn (vs default 3000)
+            # Advancement: Must MASTER this single scenario
+            min_spawner_kill_rate=0.8,  # 80% kill rate (master it!)
+            min_win_rate=0.0,  # No wins required (it's just 1 spawner)
+            min_survival_steps=200,  # Allow short episodes
+            max_survival_steps=4000,  # But don't camp forever
+            min_damage_dealt=10.0,  # Just need SOME damage
+            min_episodes=200,  # Train extensively on this scenario
+        ),
+        # Grade 1: TRANSFER TO RANDOM POSITIONS
         # Goal: Just learn to MOVE TOWARD spawner (proximity reward active!)
         # Spawner is VERY weak and won't kill agent easily
         CurriculumStage(
