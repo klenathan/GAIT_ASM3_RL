@@ -151,6 +151,12 @@ class ControlStyleConfig:
     # Curriculum Learning
     curriculum_enabled: bool = True
 
+    # Style 2 specific: Aiming guidance (defaults that have no effect for style 1)
+    reward_aim_spawner_max: float = 0.0  # No aim bonus by default
+    aim_cone_degrees: float = 30.0  # Degrees from center for any bonus
+    reward_good_position: float = 0.0  # No position bonus by default
+    position_tolerance_degrees: float = 15.0  # Tolerance around optimal firing angle
+
 
 @dataclass
 class Style1Config(ControlStyleConfig):
@@ -180,14 +186,24 @@ class Style2Config(ControlStyleConfig):
     - Positioning and spacing
     - Managing fixed shooting angle
     - Direct movement without momentum
+    - Aligning position so fixed nozzle points at spawners
     """
 
-    # Style 2 can use less shaping as movement is simpler
-    shaping_scale: float = 0.8
+    # Style 2 benefits from stronger shaping to learn positioning for fixed angle
+    shaping_scale: float = 1.2
     # Standard episode length
     max_steps: int = 3000
     # Less penalty for "inactivity" since style 2 has no momentum
     penalty_inactivity: float = 0.0
+
+    # Style 2 specific: Aiming guidance for fixed-angle shooting
+    # Bonus for having nozzle pointed toward spawner (within cone)
+    reward_aim_spawner_max: float = 0.15  # Max reward when perfectly aimed at spawner
+    aim_cone_degrees: float = 30.0  # Degrees from center for any bonus
+
+    # Positioning guidance: reward for being in a position where nozzle can hit spawner
+    reward_good_position: float = 0.1  # Bonus for being in firing line of spawner
+    position_tolerance_degrees: float = 15.0  # Tolerance around optimal firing angle
 
 
 # Factory function to get style-specific config

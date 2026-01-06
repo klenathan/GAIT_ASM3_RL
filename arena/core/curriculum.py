@@ -426,12 +426,31 @@ def get_style2_stages() -> List[CurriculumStage]:
     - Working around fixed shooting direction
 
     The curriculum focuses on:
-    1. Positioning to exploit fixed shooting angle
-    2. Hit-and-run tactics
-    3. Kiting and spacing
-    4. Map awareness and corner avoidance
+    1. Learning to position for the fixed shooting angle
+    2. Aiming by movement - getting into firing position
+    3. Hit-and-run tactics with fixed angle constraint
+    4. Kiting and spacing
+    5. Map awareness and corner avoidance
+    6. Advanced combat with full difficulty
     """
     return [
+        # Grade 0: Fixed Angle Aiming Basics
+        # Learn the fundamental skill: positioning to make the fixed angle useful
+        # Very easy enemies, high shaping to learn the aiming-by-movement concept
+        CurriculumStage(
+            name="S2-Grade 0: Fixed Angle Aiming",
+            spawn_cooldown_mult=3.0,  # Very slow spawns - focus on positioning
+            max_enemies_mult=0.3,  # Very few enemies - minimal distraction
+            spawner_health_mult=0.4,  # Very easy spawners - quick feedback
+            enemy_speed_mult=0.5,  # Very slow enemies - safe to practice
+            shaping_scale_mult=3.0,  # High guidance for aiming/positioning
+            damage_penalty_mult=0.5,  # Low penalty - encourage experimentation
+            # Advancement: Must demonstrate basic aiming ability
+            min_spawner_kill_rate=0.5,  # Kill some spawners
+            min_win_rate=0.0,  # Wins not required
+            min_survival_steps=400,  # Basic survival
+            min_episodes=50,
+        ),
         # Grade 1: Positioning Basics
         # Learn to position for the fixed shooting angle
         CurriculumStage(
