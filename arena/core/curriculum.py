@@ -266,181 +266,188 @@ class CurriculumConfig:
 
 def get_default_stages() -> List[CurriculumStage]:
     """
-    Return default 9-stage curriculum with OVERFIT-FIRST strategy.
+    Return default 8-stage curriculum with POSITIONING-FIRST strategy.
 
-    Strategy - GROKKING RECIPE (Overfit to Win, Then Generalize):
-    - Grade 0: **OVERFIT: Single Fixed Spawner** (master ONE scenario completely)
-    - Grade 1: Random Positions (transfer to variable scenarios)
-    - Grade 2: Approach spawner (just get close, very easy spawner)
-    - Grade 3: Damage spawner (hit it a few times, easy)
-    - Grade 4: Kill 1 spawner (first full kill, moderate)
-    - Grade 5: Kill multiple spawners (1.5+, getting efficient)
-    - Grade 6: Introduce weak enemies (slow spawns, maintain spawner focus)
-    - Grade 7: More enemies, faster kills
-    - Grade 8: High enemy density
-    - Grade 9: Elite performance (full difficulty)
+    CRITICAL INSIGHT: Agent must learn POSITIONING (move + aim) from the start.
+    Fixed spawners = agent memorizes ONE solution (fails on random positions).
+
+    Strategy - TEACH POSITIONING WITH VARIATION:
+    - Grade 0: 5 FIXED POSITIONS (learn to reposition based on spawner location)
+    - Grade 1: Random positions (transfer to infinite variations)
+    - Grade 2-3: Kill more spawners, get efficient
+    - Grade 4+: Add enemies progressively
+
+    Why 5 positions works:
+    - Forces agent to learn "IF spawner is at X, THEN move/rotate to Y"
+    - Teaches decision-making based on observation (not memorization)
+    - Smooth transfer to random positions (just more variations of same skill)
     """
     return [
         # =====================================================================
-        # GRADE 0: OVERFIT TO SINGLE SPAWNER (NEW!)
+        # GRADE 0: MULTIPLE FIXED POSITIONS - Learn to Reposition!
         # =====================================================================
-        # PHILOSOPHY: Make the SIMPLEST possible task and OVERFIT completely
-        # Agent will learn: approach → aim → shoot → kill on ONE fixed scenario
-        # Expected: 95%+ kill rate within 1-2M steps (guaranteed learning!)
+        # PHILOSOPHY: Teach positioning FROM THE START with LIMITED variation
+        # Agent learns: "Observe spawner position → Calculate positioning → Execute"
+        # 5 positions: top-left, top-right, center, bottom-left, bottom-right
+        # Expected: 70%+ kill rate within 1.5M steps (learning to position!)
         CurriculumStage(
-            name="Grade 0: OVERFIT Single Spawner",
+            name="Grade 0: Learn Positioning (5 Fixed Positions)",
             spawn_cooldown_mult=999.0,  # NO enemy spawning
             max_enemies_mult=0.0,  # NO ENEMIES AT ALL
-            spawner_health_mult=0.15,  # ULTRA WEAK (15 HP = 1.5 shots!)
+            spawner_health_mult=0.12,  # ULTRA WEAK (12 HP = 1.2 shots!)
             enemy_speed_mult=0.5,  # N/A
-            shaping_scale_mult=15.0,  # MAXIMUM GUIDANCE (15× all shaping rewards!)
-            damage_penalty_mult=0.2,  # Very low penalty - encourage exploration
-            # FIXED POSITION: Always spawn at center of arena
-            fixed_spawner_positions=[(800, 640)],  # Single spawner at center
-            max_episode_steps=5000,  # More time to learn (vs default 3000)
-            # Advancement: Must MASTER this single scenario
-            min_spawner_kill_rate=0.8,  # 80% kill rate (master it!)
-            min_win_rate=0.0,  # No wins required (it's just 1 spawner)
-            min_survival_steps=200,  # Allow short episodes
-            max_survival_steps=4000,  # But don't camp forever
-            min_damage_dealt=10.0,  # Just need SOME damage
-            min_episodes=200,  # Train extensively on this scenario
+            shaping_scale_mult=20.0,  # MAXIMUM GUIDANCE (20× proximity + aimed shot!)
+            damage_penalty_mult=0.1,  # Minimal penalty - encourage exploration
+            # 5 FIXED POSITIONS: Force agent to learn repositioning!
+            fixed_spawner_positions=[
+                (400, 320),  # Top-left quadrant
+                (1200, 320),  # Top-right quadrant
+                (800, 640),  # Center
+                (400, 960),  # Bottom-left quadrant
+                (1200, 960),  # Bottom-right quadrant
+            ],
+            max_episode_steps=4000,  # More time to explore positioning
+            # Advancement: Must show consistent positioning skill
+            min_spawner_kill_rate=0.7,  # 70% kill rate (learning positioning!)
+            min_win_rate=0.0,  # No wins required
+            min_survival_steps=250,  # Allow short episodes
+            max_survival_steps=3500,  # Don't camp forever
+            min_damage_dealt=12.0,  # Must deal some damage
+            min_episodes=300,  # Train extensively to master repositioning
         ),
-        # Grade 1: TRANSFER TO RANDOM POSITIONS
-        # Goal: Just learn to MOVE TOWARD spawner (proximity reward active!)
-        # Spawner is VERY weak and won't kill agent easily
+        # =====================================================================
+        # GRADE 1: RANDOM POSITIONS - Transfer Positioning Skill!
+        # =====================================================================
+        # PHILOSOPHY: Agent already knows how to reposition (from 5-position training)
+        # Now test if it generalizes to INFINITE variations
+        # Expected: 50%+ kill rate within 500K steps (successful transfer!)
         CurriculumStage(
-            name="Grade 1: Approach Spawner",
+            name="Grade 1: Random Positions (Transfer Learning)",
             spawn_cooldown_mult=999.0,  # NO enemy spawning
             max_enemies_mult=0.0,  # NO ENEMIES
-            spawner_health_mult=0.3,  # VERY EASY spawners (30 HP, 3 hits!)
+            spawner_health_mult=0.15,  # ULTRA WEAK (15 HP = 1.5 shots!)
             enemy_speed_mult=0.5,  # N/A
-            shaping_scale_mult=5.0,  # VERY HIGH guidance (proximity reward!)
-            damage_penalty_mult=0.3,  # Low penalty - encourage exploration
-            # Advancement: Just need to damage spawners a bit
-            min_spawner_kill_rate=0.3,  # Kill 0.3 spawners/episode (1 every 3 episodes!)
+            shaping_scale_mult=15.0,  # HIGH guidance (maintain proximity + aimed shot!)
+            damage_penalty_mult=0.2,  # Low penalty - encourage exploration
+            # NO FIXED POSITIONS: Random spawner placement
+            fixed_spawner_positions=None,  # Random positions!
+            max_episode_steps=4000,  # Same as Grade 0
+            # Advancement: Show positioning works on random locations
+            min_spawner_kill_rate=0.6,  # 60% kill rate (transfer successful!)
             min_win_rate=0.0,  # No wins required
-            min_survival_steps=300,  # Short episodes OK
-            max_survival_steps=2500,  # Don't camp forever
-            min_damage_dealt=20.0,  # Must deal SOME damage
-            min_episodes=75,  # Quick stage
+            min_survival_steps=250,  # Short episodes OK
+            max_survival_steps=3500,  # Don't camp
+            min_damage_dealt=15.0,  # Must deal damage
+            min_episodes=250,  # Ensure transfer is solid
         ),
-        # Grade 2: DAMAGE SPAWNER (Learn to Shoot)
-        # Goal: Learn to SHOOT and HIT spawner consistently
+        # =====================================================================
+        # GRADE 2: INCREASE SPAWNER DIFFICULTY - Get Efficient!
+        # =====================================================================
+        # Agent can position and kill weak spawners → now increase difficulty
         CurriculumStage(
-            name="Grade 2: Damage Spawner",
+            name="Grade 2: Tougher Spawners (Random)",
             spawn_cooldown_mult=999.0,  # Still no enemies
-            max_enemies_mult=0.0,  # Still NO ENEMIES
-            spawner_health_mult=0.4,  # Still easy (40 HP, 4 hits)
+            max_enemies_mult=0.0,  # NO ENEMIES
+            spawner_health_mult=0.30,  # Moderate (30 HP, 3 hits)
             enemy_speed_mult=0.5,  # N/A
-            shaping_scale_mult=4.0,  # High guidance
-            damage_penalty_mult=0.4,  # Low penalty
-            # Advancement: Must hit spawners more
-            min_spawner_kill_rate=0.5,  # Kill 0.5 spawners/episode
+            shaping_scale_mult=10.0,  # Good guidance
+            damage_penalty_mult=0.3,  # Low penalty
+            # Advancement: Must maintain kill rate with tougher spawners
+            min_spawner_kill_rate=0.75,  # 75% kill rate
             min_win_rate=0.0,  # No wins required
-            min_survival_steps=350,  # Short episodes
-            max_survival_steps=2400,  # Don't camp
-            min_damage_dealt=50.0,  # Must deal decent damage
+            min_survival_steps=300,  # Short episodes
+            max_survival_steps=3000,  # Efficient
+            min_damage_dealt=30.0,  # More damage needed
             min_episodes=200,
         ),
-        # Grade 3: KILL 1 SPAWNER (First Full Kill)
-        # Goal: Destroy a spawner completely
+        # =====================================================================
+        # GRADE 3: KILL MULTIPLE SPAWNERS - Master Positioning!
+        # =====================================================================
+        # Goal: Kill spawners efficiently, handle phase transitions
         CurriculumStage(
-            name="Grade 3: Kill 1 Spawner",
-            spawn_cooldown_mult=999.0,  # Still no enemies
-            max_enemies_mult=0.0,  # Still NO ENEMIES
-            spawner_health_mult=0.55,  # Moderate (55 HP, 6 hits)
-            enemy_speed_mult=0.5,  # N/A
-            shaping_scale_mult=3.5,  # Good guidance
-            damage_penalty_mult=0.5,  # Moderate penalty
-            # Advancement: Must kill at least 1 spawner per episode
-            min_spawner_kill_rate=0.8,  # Kill 0.8+ spawners/episode
-            min_win_rate=0.0,  # No wins required
-            min_survival_steps=400,  # Reasonable time
-            max_survival_steps=2300,  # Don't be too slow
-            min_damage_dealt=80.0,  # Good damage
-            min_episodes=2000,
-        ),
-        # Grade 4: KILL MULTIPLE SPAWNERS (Get Efficient)
-        # Goal: Kill spawners efficiently, handle phases
-        CurriculumStage(
-            name="Grade 4: Kill Multiple Spawners",
+            name="Grade 3: Kill Multiple Spawners",
             spawn_cooldown_mult=999.0,  # Still no enemies!
             max_enemies_mult=0.0,  # STILL NO ENEMIES
-            spawner_health_mult=0.7,  # Moderate (70 HP, 7 hits)
+            spawner_health_mult=0.50,  # Moderate (50 HP, 5 hits)
             enemy_speed_mult=0.5,  # N/A
-            shaping_scale_mult=3.0,  # Good guidance
-            damage_penalty_mult=0.6,  # Moderate penalty
+            shaping_scale_mult=7.0,  # Good guidance
+            damage_penalty_mult=0.4,  # Moderate penalty
+            # Advancement: Kill 1.2+ spawners per episode
+            min_spawner_kill_rate=1.2,  # Must be efficient
+            min_win_rate=0.0,  # No wins yet
+            min_survival_steps=400,  # Reasonable time
+            max_survival_steps=2500,  # Don't be passive
+            min_damage_dealt=70.0,  # High damage
+            min_episodes=300,
+        ),
+        # =====================================================================
+        # GRADE 4: FULL HEALTH SPAWNERS + EFFICIENCY
+        # =====================================================================
+        # Goal: Kill spawners at full difficulty (health-wise), no enemies yet
+        CurriculumStage(
+            name="Grade 4: Full Health Spawners",
+            spawn_cooldown_mult=999.0,  # Still no enemies!
+            max_enemies_mult=0.0,  # STILL NO ENEMIES
+            spawner_health_mult=0.75,  # Strong (75 HP, 7-8 hits)
+            enemy_speed_mult=0.5,  # N/A
+            shaping_scale_mult=5.0,  # Moderate guidance
+            damage_penalty_mult=0.5,  # Moderate penalty
             # Advancement: Kill 1.5+ spawners per episode
-            min_spawner_kill_rate=1.5,  # Must be efficient
+            min_spawner_kill_rate=1.5,  # Efficient spawner destruction
             min_win_rate=0.0,  # No wins yet
             min_survival_steps=500,  # Reasonable time
-            max_survival_steps=2000,  # Don't be passive
-            min_damage_dealt=120.0,  # High damage
-            min_episodes=1000,
+            max_survival_steps=2300,  # Efficient play
+            min_damage_dealt=100.0,  # High damage
+            min_episodes=200,
         ),
-        # Grade 5: INTRODUCE ENEMIES (Slow & Weak)
+        # =====================================================================
+        # GRADE 5: INTRODUCE ENEMIES (Slow & Weak)
+        # =====================================================================
         # Goal: Maintain spawner focus while avoiding enemies
         CurriculumStage(
             name="Grade 5: Introduce Enemies",
-            spawn_cooldown_mult=3.5,  # VERY slow enemy spawns
-            max_enemies_mult=0.3,  # FEW enemies (30%)
-            spawner_health_mult=0.75,  # Moderate (75 HP)
-            enemy_speed_mult=0.55,  # SLOW enemies (55% speed)
-            shaping_scale_mult=2.5,  # Moderate guidance
-            damage_penalty_mult=0.75,  # Moderate penalty
+            spawn_cooldown_mult=4.0,  # VERY slow enemy spawns
+            max_enemies_mult=0.25,  # FEW enemies (25%)
+            spawner_health_mult=0.75,  # Strong (75 HP)
+            enemy_speed_mult=0.5,  # SLOW enemies (50% speed)
+            shaping_scale_mult=4.0,  # Moderate guidance
+            damage_penalty_mult=0.7,  # Moderate penalty
             # Advancement: Must maintain spawner kills with enemies
             min_spawner_kill_rate=1.2,  # Kill 1.2+ spawners/episode
             min_win_rate=0.0,  # No wins required
             min_survival_steps=550,  # Survive with enemies
             max_survival_steps=2200,  # Reasonable pace
-            min_enemy_kill_rate=1.5,  # Some enemy kills
-            min_damage_dealt=130.0,  # Good damage
-            min_episodes=100,
+            min_enemy_kill_rate=1.0,  # Some enemy kills
+            min_damage_dealt=110.0,  # Good damage
+            min_episodes=200,
         ),
-        # Grade 6: MORE ENEMIES, FASTER KILLS
+        # =====================================================================
+        # GRADE 6: MORE ENEMIES, FASTER KILLS
+        # =====================================================================
         # Goal: Kill spawners faster with more enemies present
         CurriculumStage(
             name="Grade 6: Fast Kills with Enemies",
-            spawn_cooldown_mult=2.8,  # Faster spawns
+            spawn_cooldown_mult=2.5,  # Faster spawns
             max_enemies_mult=0.45,  # More enemies (45%)
-            spawner_health_mult=0.82,  # Harder spawners (82 HP)
-            enemy_speed_mult=0.68,  # Moderate speed (68%)
-            shaping_scale_mult=2.0,  # Less guidance
-            damage_penalty_mult=0.9,  # Higher penalty
-            # Advancement: Kill 2+ spawners with enemies
+            spawner_health_mult=0.85,  # Harder spawners (85 HP)
+            enemy_speed_mult=0.65,  # Moderate speed (65%)
+            shaping_scale_mult=2.5,  # Less guidance
+            damage_penalty_mult=0.85,  # Higher penalty
+            # Advancement: Kill 1.8+ spawners with enemies
             min_spawner_kill_rate=1.8,  # Kill 1.8+ spawners/episode
-            min_win_rate=0.03,  # Some wins required (3%)
+            min_win_rate=0.05,  # Some wins required (5%)
             min_survival_steps=600,  # Good survival
-            max_survival_steps=2000,  # Must be efficient
-            min_enemy_kill_rate=3.0,  # More enemy kills
-            min_damage_dealt=170.0,  # High damage
-            min_episodes=125,
+            max_survival_steps=1900,  # Must be efficient
+            min_enemy_kill_rate=2.5,  # More enemy kills
+            min_damage_dealt=150.0,  # High damage
+            min_episodes=200,
         ),
-        # Grade 7: HIGH ENEMY DENSITY
-        # Goal: Handle many enemies while killing spawners
-        CurriculumStage(
-            name="Grade 7: High Enemy Density",
-            spawn_cooldown_mult=1.8,  # Faster spawns
-            max_enemies_mult=0.7,  # Many enemies (70%)
-            spawner_health_mult=0.9,  # Strong spawners (90 HP)
-            enemy_speed_mult=0.82,  # Fast enemies (82% speed)
-            shaping_scale_mult=1.3,  # Minimal guidance
-            damage_penalty_mult=1.05,  # Higher penalty
-            # Advancement: Must handle high enemy count
-            min_spawner_kill_rate=2.3,  # Kill 2.3+ spawners/episode
-            min_win_rate=0.10,  # 10% win rate
-            min_survival_steps=650,  # Good survival
-            max_survival_steps=1900,  # Efficient play
-            min_enemy_kill_rate=7.0,  # High enemy kills
-            min_damage_dealt=220.0,  # High damage
-            max_damage_taken=160.0,  # Good defense
-            min_episodes=150,
-        ),
-        # Grade 8: ELITE PERFORMANCE (Full Game)
+        # =====================================================================
+        # GRADE 7: ELITE PERFORMANCE (Full Game)
+        # =====================================================================
         # Goal: Master-level performance at full difficulty
         CurriculumStage(
-            name="Grade 8: Elite Performance",
+            name="Grade 7: Elite Performance",
             spawn_cooldown_mult=1.0,  # Full spawn rate
             max_enemies_mult=1.0,  # Maximum enemies (100%)
             spawner_health_mult=1.0,  # Full spawner health (100 HP)
@@ -448,14 +455,14 @@ def get_default_stages() -> List[CurriculumStage]:
             shaping_scale_mult=1.0,  # Minimal shaping
             damage_penalty_mult=1.0,  # Standard penalty
             # Final stage - elite performance
-            min_spawner_kill_rate=3.5,  # Excellent spawner destruction
-            min_win_rate=0.35,  # High win rate (35%)
+            min_spawner_kill_rate=2.5,  # Excellent spawner destruction
+            min_win_rate=0.20,  # Good win rate (20%)
             min_survival_steps=650,  # Good survival
             max_survival_steps=1750,  # Fast, efficient wins
-            min_enemy_kill_rate=12.0,  # Very high kill rate
-            min_damage_dealt=300.0,  # Excellent damage
-            max_damage_taken=125.0,  # Excellent defense
-            min_episodes=200,
+            min_enemy_kill_rate=8.0,  # High kill rate
+            min_damage_dealt=250.0,  # Excellent damage
+            max_damage_taken=140.0,  # Good defense
+            min_episodes=300,
         ),
     ]
 
