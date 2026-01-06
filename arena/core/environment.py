@@ -150,6 +150,12 @@ class ArenaEnv(gym.Env):
         ):
             if self.player.shoot():
                 reward += float(config.REWARD_SHOT_FIRED)
+
+                # Aimed Shot Reward: Reward for shooting WHILE AIMED at spawner
+                # This helps teach shooting behavior in early stages
+                aimed_shot_reward = self._calculate_aimed_shot_reward()
+                reward += aimed_shot_reward
+
                 # Both styles use player.rotation for shooting
                 # Style 1: rotation follows player's facing direction
                 # Style 2: rotation is fixed (randomized at episode start)
@@ -648,6 +654,57 @@ class ArenaEnv(gym.Env):
             + proximity_reward
         )
         return float(np.clip(reward, -config.SHAPING_CLIP, config.SHAPING_CLIP))
+
+    def _calculate_aimed_shot_reward(self):
+        """
+        Reward for shooting WHILE AIMED at a spawner (even if shot misses).
+        Helps teach shooting behavior in early stages.
+
+        Scaled down in later curriculum stages via shaping_scale_mult:
+        - Grade 1: 5.0× (strong guidance)
+        - Grade 4: 3.0×
+        - Grade 8: 1.0× (minimal)
+        """
+        if not self.spawners:
+            return 0.0
+
+        # Find nearest alive spawner
+        alive_spawners = [s for s in self.spawners if s.alive]
+        if not alive_spawners:
+            return 0.0
+
+        nearest_spawner = min(
+            alive_spawners, key=lambda s: utils.distance(self.player.pos, s.pos)
+        )
+
+        # Calculate angle from player to spawner
+        angle_to_spawner = utils.angle_to_point(self.player.pos, nearest_spawner.pos)
+
+        # Calculate angular difference between shooting direction and spawner
+        angle_diff = utils.relative_angle(self.player.rotation, angle_to_spawner)
+
+        # Check if aimed at spawner (within tolerance)
+        # Use generous tolerance in early stages to encourage any attempt at aiming
+        aim_tolerance = math.radians(30)  # 30 degrees tolerance
+
+        if abs(angle_diff) <= aim_tolerance:
+            # Calculate alignment quality (1.0 = perfect, 0.0 = at edge of tolerance)
+            alignment_quality = 1.0 - (abs(angle_diff) / aim_tolerance)
+
+            # Base reward scaled by alignment quality
+            base_reward = 1.0 * alignment_quality  # 0.0 to 1.0
+
+            # Apply curriculum scaling (stronger in early stages)
+            shaping_scale = 1.0
+            if self.curriculum_stage:
+                shaping_scale = self.curriculum_stage.shaping_scale_mult
+
+            # Final reward: scales from 5.0 (Grade 1) to 1.0 (Grade 8)
+            final_reward = base_reward * shaping_scale
+
+            return float(final_reward)
+
+        return 0.0
 
     def _calculate_proximity_reward(self):
         """
