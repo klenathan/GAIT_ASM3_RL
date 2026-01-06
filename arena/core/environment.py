@@ -724,8 +724,8 @@ class ArenaEnv(gym.Env):
 
     def _calculate_proximity_reward(self):
         """
-        Reward for moving closer to nearest spawner.
-        Helps agent learn to approach spawners, especially in early curriculum stages.
+        Reward for moving closer to nearest spawner ONLY when making progress.
+        Anti-camping: penalizes being too close without dealing damage.
         """
         if not self.spawners:
             return 0.0
@@ -748,9 +748,30 @@ class ArenaEnv(gym.Env):
         # Calculate distance change (negative = getting closer = good!)
         delta_dist = current_dist - self._prev_spawner_dist
 
-        # Reward for getting closer, penalty for moving away
-        # Scale: 0.002 per pixel change (small but meaningful)
+        # Base proximity reward for moving closer
         proximity_reward = -delta_dist * 0.002
+
+        # ANTI-CAMPING PENALTY: If too close without recent damage, penalize
+        # This prevents agent from camping near spawners without shooting
+        optimal_distance_min = 150  # Too close = dangerous/camping
+        optimal_distance_max = 600  # Sweet spot for shooting
+
+        if current_dist < optimal_distance_min:
+            # Too close - check if dealing damage
+            current_spawner_health = sum(s.health for s in self.spawners if s.alive)
+            spawner_damage_this_step = (
+                max(0, self._prev_spawner_total_health - current_spawner_health)
+                if self._prev_spawner_total_health
+                else 0
+            )
+
+            # If camping (too close but not dealing damage), penalize
+            if spawner_damage_this_step == 0:
+                camping_penalty = -0.01 * (1.0 - current_dist / optimal_distance_min)
+                proximity_reward += camping_penalty
+        elif current_dist > optimal_distance_max:
+            # Too far - reduce reward for approaching
+            proximity_reward *= 0.5
 
         # Update tracker
         self._prev_spawner_dist = current_dist

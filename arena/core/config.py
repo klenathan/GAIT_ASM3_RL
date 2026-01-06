@@ -81,21 +81,21 @@ COLOR_ENTROPY_LOW = (255, 100, 100)  # Red - low entropy (confident)
 # Entity Parameters
 PLAYER_RADIUS = 15
 PLAYER_MAX_HEALTH = 150
-PLAYER_SPEED = 5.0
+PLAYER_SPEED = 6.0
 PLAYER_ROTATION_SPEED = 5.0
 PLAYER_THRUST = 0.3
 PLAYER_MAX_VELOCITY = 6.0
 PLAYER_FRICTION = 0.97
-PLAYER_SHOOT_COOLDOWN = 10
+PLAYER_SHOOT_COOLDOWN = 2
 
 ENEMY_RADIUS = 12
-ENEMY_HEALTH = 10
+ENEMY_HEALTH = 5
 ENEMY_SPEED = 2.0
-ENEMY_DAMAGE = 10
-ENEMY_SHOOT_COOLDOWN = 60
+ENEMY_DAMAGE = 5
+ENEMY_SHOOT_COOLDOWN = 120
 ENEMY_SHOOT_PROBABILITY = 0.3
 
-SPAWNER_RADIUS = 25
+SPAWNER_RADIUS = 35
 SPAWNER_HEALTH = 100
 SPAWNER_SPAWN_COOLDOWN = 120
 SPAWNER_MAX_ENEMIES = 8
@@ -103,7 +103,7 @@ SPAWNER_MAX_ENEMIES = 8
 PROJECTILE_RADIUS = 3
 PROJECTILE_SPEED = 8.0
 PROJECTILE_DAMAGE = 10
-PROJECTILE_LIFETIME = 120
+PROJECTILE_LIFETIME = 420
 
 # Phase System
 PHASE_CONFIG = [
@@ -116,7 +116,8 @@ PHASE_CONFIG = [
 MAX_PHASES = len(PHASE_CONFIG)
 
 # Reward Structure - Option B: Aggressive Optimization for Maximum Win Rate
-MAX_STEPS = 3000
+# Reduced for faster training (curriculum stages override this)
+MAX_STEPS = 2500
 
 # Primary Objective: WINNING
 REWARD_WIN = 500.0  # NEW! Massive reward for completing all phases
@@ -221,7 +222,9 @@ class TrainerConfig:
     lr_warmup_fraction: float = 0.0
 
     # DQN specific
-    dqn_hidden_layers: List[int] = field(default_factory=lambda: [256, 128, 64])
+    dqn_hidden_layers: List[int] = field(
+        default_factory=lambda: [512, 384, 256, 128, 64]
+    )
     dqn_activation: str = "SiLU"
 
     # PPO specific
@@ -265,13 +268,13 @@ class DQNHyperparams:
 @dataclass
 class PPOHyperparams:
     learning_rate: float = 5e-4
-    n_steps: int = 4096
-    batch_size: int = 64
+    n_steps: int = 2048  # Reduced from 4096 for faster updates
+    batch_size: int = 128  # Increased for better gradient estimates
     n_epochs: int = 10
     gamma: float = 0.99
     gae_lambda: float = 0.95
     clip_range: float = 0.1
-    ent_coef: float = 0.10  # Increased for more exploration (was 0.05)
+    ent_coef: float = 0.08  # Slightly reduced for faster convergence
     vf_coef: float = 1.0
     max_grad_norm: float = 0.5
     target_kl: float = 0.03
