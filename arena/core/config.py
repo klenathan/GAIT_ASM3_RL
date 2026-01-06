@@ -107,11 +107,11 @@ PROJECTILE_LIFETIME = 120
 
 # Phase System
 PHASE_CONFIG = [
-    {"spawners": 1, "enemy_speed_mult": 1.0, "spawn_rate_mult": 0.8},
+    {"spawners": 1, "enemy_speed_mult": 1.0, "spawn_rate_mult": 0.9},
     {"spawners": 1, "enemy_speed_mult": 0.9, "spawn_rate_mult": 0.9},
-    {"spawners": 1, "enemy_speed_mult": 0.8, "spawn_rate_mult": 0.3},
-    {"spawners": 2, "enemy_speed_mult": 0.6, "spawn_rate_mult": 0.2},
-    {"spawners": 3, "enemy_speed_mult": 0.5, "spawn_rate_mult": 0.1},
+    {"spawners": 1, "enemy_speed_mult": 0.8, "spawn_rate_mult": 0.8},
+    {"spawners": 2, "enemy_speed_mult": 0.7, "spawn_rate_mult": 0.6},
+    {"spawners": 3, "enemy_speed_mult": 0.6, "spawn_rate_mult": 0.5},
 ]
 MAX_PHASES = len(PHASE_CONFIG)
 
@@ -213,6 +213,13 @@ class TrainerConfig:
     load_vecnormalize: bool = True  # Load VecNormalize stats if available
     load_curriculum: bool = True  # Restore curriculum progress
     load_replay_buffer: bool = True  # Load replay buffer (DQN only)
+
+    # Imitation Learning (Behavioral Cloning) settings
+    demo_path: Optional[str] = None  # Path to demonstration file (.pkl)
+    bc_pretrain: bool = False  # Whether to pretrain with BC before RL
+    bc_epochs: int = 10  # Number of BC pretraining epochs
+    bc_learning_rate: float = 1e-3  # BC learning rate
+    bc_batch_size: int = 64  # BC batch size
 
     # Learning rate schedule
     lr_schedule: str = "cosine"  # "constant", "linear", "exponential", "cosine"
