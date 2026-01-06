@@ -91,6 +91,9 @@ class ArenaEnv(gym.Env):
         self._prev_enemy_count = None
         self._prev_player_health = None
         self.phase_start_step = 0
+        self._shot_this_step = (
+            False  # Track if player shot this step (for Style 2 aim bonus)
+        )
 
     @property
     def curriculum_stage(self) -> CurriculumStage:
@@ -140,6 +143,7 @@ class ArenaEnv(gym.Env):
         # Reset step-level counters
         self.enemies_destroyed_this_step = 0
         self.spawners_destroyed_this_step = 0
+        self._shot_this_step = False  # Reset shot tracking for Style 2 aim bonus
 
         if self.control_style == 1:
             self.player.update_style_1(action)
@@ -150,6 +154,7 @@ class ArenaEnv(gym.Env):
             self.control_style == 2 and action == 5
         ):
             if self.player.shoot():
+                self._shot_this_step = True  # Mark that we shot this step
                 reward += float(self.style_config.reward_shot_fired)
                 # Both styles use player.rotation for shooting
                 # Style 1: rotation follows player's facing direction
@@ -629,26 +634,28 @@ class ArenaEnv(gym.Env):
 
     def _calculate_style2_aim_position_bonus(self):
         """
-        Calculate aiming and positioning bonus for Style 2 (fixed-angle shooting).
+        Calculate aiming bonus for Style 2 (fixed-angle shooting).
 
-        This guides the agent to:
-        1. Position itself so the fixed nozzle points toward spawners
-        2. Reward being in the "firing line" where shots can hit spawners
+        IMPORTANT: This bonus is ONLY given when the agent shoots while aimed at a spawner.
+        This prevents exploitation where the agent just positions without shooting.
 
-        The closer the nozzle angle points to the center of a spawner,
-        the higher the reward. No bonus if outside the cone (30 degrees).
+        The reward structure encourages:
+        1. Shooting when aligned with spawner (higher bonus for better alignment)
+        2. Not shooting when misaligned (no bonus wasted)
+
+        The bonus is given at shot time, not continuously, to prevent passive exploitation.
         """
+        # Only give bonus if agent shot this step
+        if not self._shot_this_step:
+            return 0.0
+
         if not self.spawners:
             return 0.0
 
-        total_bonus = 0.0
         player_rotation = self.player.rotation  # Fixed shooting angle for this episode
         aim_cone_rad = math.radians(self.style_config.aim_cone_degrees)
-        position_tolerance_rad = math.radians(
-            self.style_config.position_tolerance_degrees
-        )
 
-        # Find the nearest alive spawner for primary targeting bonus
+        # Find the nearest alive spawner
         nearest_spawner = None
         min_dist = float("inf")
         for spawner in self.spawners:
@@ -665,53 +672,23 @@ class ArenaEnv(gym.Env):
         angle_to_spawner = utils.angle_to_point(self.player.pos, nearest_spawner.pos)
 
         # Calculate the angular difference between nozzle direction and spawner direction
-        # This is in the range [-pi, pi]
         angle_diff = utils.relative_angle(player_rotation, angle_to_spawner)
         abs_angle_diff = abs(angle_diff)
 
-        # Aiming bonus: reward for nozzle pointing toward spawner
-        # Only give bonus if within the aim cone (e.g., 30 degrees)
-        if abs_angle_diff <= aim_cone_rad:
-            # Linear scaling: max reward at center (0 diff), decreasing to 0 at edge of cone
-            # Use cosine-based scaling for smoother gradient
-            aim_factor = math.cos(abs_angle_diff * (math.pi / 2) / aim_cone_rad)
-            aim_bonus = self.style_config.reward_aim_spawner_max * aim_factor
-            total_bonus += aim_bonus
+        # Only give bonus if shooting within the aim cone (30 degrees)
+        if abs_angle_diff > aim_cone_rad:
+            return 0.0
 
-        # Positioning bonus: reward for being in a position where shooting makes sense
-        # This rewards the agent for moving to positions where the fixed angle can hit the spawner
-        # The idea: if the agent is positioned such that the spawner is roughly in the
-        # direction of the fixed nozzle, give a smaller continuous bonus
-        if abs_angle_diff <= position_tolerance_rad:
-            # Perfect alignment - maximum position bonus
-            position_factor = 1.0 - (abs_angle_diff / position_tolerance_rad)
-            position_bonus = self.style_config.reward_good_position * position_factor
-            total_bonus += position_bonus
-
-        # Distance-based scaling: reduce bonus when very far (encourages approaching)
-        # and when very close (already in attack range)
-        max_dist = math.sqrt(config.GAME_WIDTH**2 + config.GAME_HEIGHT**2)
-        dist_ratio = min_dist / max_dist
-
-        # Optimal distance range: not too close (danger), not too far (can't hit)
-        # Sweet spot around 0.1 to 0.4 of max distance
-        if dist_ratio < 0.05:
-            # Very close - slight penalty to encourage safe distance
-            distance_mult = 0.5
-        elif dist_ratio < 0.4:
-            # Good attacking range - full bonus
-            distance_mult = 1.0
-        else:
-            # Far away - reduced bonus, scaled down
-            distance_mult = max(0.2, 1.0 - (dist_ratio - 0.4) * 1.5)
-
-        total_bonus *= distance_mult
+        # Bonus scales with alignment quality - better aim = more bonus
+        # Use cosine for smooth gradient: 1.0 at perfect aim, 0 at edge of cone
+        aim_factor = math.cos(abs_angle_diff * (math.pi / 2) / aim_cone_rad)
+        aim_bonus = self.style_config.reward_aim_spawner_max * aim_factor
 
         # Apply curriculum scaling if applicable
         if self.curriculum_stage:
-            total_bonus *= self.curriculum_stage.shaping_scale_mult
+            aim_bonus *= self.curriculum_stage.shaping_scale_mult
 
-        return float(total_bonus)
+        return float(aim_bonus)
 
     def _get_info(self):
         return {

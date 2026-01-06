@@ -81,29 +81,29 @@ COLOR_ENTROPY_LOW = (255, 100, 100)  # Red - low entropy (confident)
 # Entity Parameters
 PLAYER_RADIUS = 15
 PLAYER_MAX_HEALTH = 150
-PLAYER_SPEED = 5.0
-PLAYER_ROTATION_SPEED = 5.0
+PLAYER_SPEED = 7.0
+PLAYER_ROTATION_SPEED = 6.0
 PLAYER_THRUST = 0.3
 PLAYER_MAX_VELOCITY = 6.0
 PLAYER_FRICTION = 0.97
-PLAYER_SHOOT_COOLDOWN = 10
+PLAYER_SHOOT_COOLDOWN = 5
 
 ENEMY_RADIUS = 12
 ENEMY_HEALTH = 10
-ENEMY_SPEED = 2.0
-ENEMY_DAMAGE = 10
-ENEMY_SHOOT_COOLDOWN = 60
+ENEMY_SPEED = 1.0
+ENEMY_DAMAGE = 5
+ENEMY_SHOOT_COOLDOWN = 260
 ENEMY_SHOOT_PROBABILITY = 0.3
 
-SPAWNER_RADIUS = 25
+SPAWNER_RADIUS = 35
 SPAWNER_HEALTH = 100
-SPAWNER_SPAWN_COOLDOWN = 120
-SPAWNER_MAX_ENEMIES = 8
+SPAWNER_SPAWN_COOLDOWN = 420
+SPAWNER_MAX_ENEMIES = 4
 
 PROJECTILE_RADIUS = 3
 PROJECTILE_SPEED = 8.0
-PROJECTILE_DAMAGE = 10
-PROJECTILE_LIFETIME = 120
+PROJECTILE_DAMAGE = 5
+PROJECTILE_LIFETIME = 420
 
 # Phase System
 PHASE_CONFIG = [
@@ -151,11 +151,10 @@ class ControlStyleConfig:
     # Curriculum Learning
     curriculum_enabled: bool = True
 
-    # Style 2 specific: Aiming guidance (defaults that have no effect for style 1)
-    reward_aim_spawner_max: float = 0.0  # No aim bonus by default
+    # Style 2 specific: Aiming guidance for shooting (defaults that have no effect for style 1)
+    # Bonus given ONLY when shooting while aimed at spawner (prevents exploitation)
+    reward_aim_spawner_max: float = 0.0  # No aim bonus by default (Style 1)
     aim_cone_degrees: float = 30.0  # Degrees from center for any bonus
-    reward_good_position: float = 0.0  # No position bonus by default
-    position_tolerance_degrees: float = 15.0  # Tolerance around optimal firing angle
 
 
 @dataclass
@@ -196,14 +195,12 @@ class Style2Config(ControlStyleConfig):
     # Less penalty for "inactivity" since style 2 has no momentum
     penalty_inactivity: float = 0.0
 
-    # Style 2 specific: Aiming guidance for fixed-angle shooting
-    # Bonus for having nozzle pointed toward spawner (within cone)
-    reward_aim_spawner_max: float = 0.15  # Max reward when perfectly aimed at spawner
-    aim_cone_degrees: float = 30.0  # Degrees from center for any bonus
-
-    # Positioning guidance: reward for being in a position where nozzle can hit spawner
-    reward_good_position: float = 0.1  # Bonus for being in firing line of spawner
-    position_tolerance_degrees: float = 15.0  # Tolerance around optimal firing angle
+    # Style 2 specific: Aiming bonus given ONLY when shooting while aimed at spawner
+    # This encourages shooting when well-positioned without allowing passive exploitation
+    reward_aim_spawner_max: float = (
+        0.3  # Bonus when shooting while aimed at spawner center
+    )
+    aim_cone_degrees: float = 30.0  # Degrees from center for any bonus (0 outside cone)
 
 
 # Factory function to get style-specific config
