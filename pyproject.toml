@@ -19,6 +19,7 @@ dependencies = [
     "torchaudio",
     "sb3-contrib>=2.7.1",
     "pygame-emojis>=0.2.0",
+    "optuna-dashboard>=0.20.0",
 ]
 
 
