@@ -199,7 +199,7 @@ class TrainerConfig:
 
     # PPO specific
     ppo_net_arch: Dict[str, List[int]] = field(
-        default_factory=lambda: dict(pi=[256, 128, 64], vf=[256, 128, 64]))
+        default_factory=lambda: dict(pi=[512, 384, 256, 128, 64], vf=[512, 384, 256, 128, 64]))
     ppo_activation: str = "SiLU"
 
     # LSTM specific
