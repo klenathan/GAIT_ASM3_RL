@@ -22,6 +22,7 @@ from arena.training.callbacks import (
     ArenaCallback,
     PerformanceCallback,
     HParamCallback,
+    StyleConfigCallback,
     CurriculumCallback,
     LearningRateCallback,
     CheckpointWithStateCallback,
@@ -153,12 +154,22 @@ class BaseTrainer(ABC):
         # Prepare flat hparams for TensorBoard
         tb_hparams = {"algo": self.config.algo, "style": self.config.style, **hparams}
 
+        # Get style-specific config for logging
+        from arena.core.config import get_style_config
+
+        style_config = get_style_config(self.config.style)
+
         self.callbacks = CallbackList(
             [
                 checkpoint,
                 ArenaCallback(verbose=0),
                 PerformanceCallback(verbose=0),
                 HParamCallback(tb_hparams),
+                StyleConfigCallback(
+                    control_style=self.config.style,
+                    style_config=style_config,
+                    curriculum_manager=self.curriculum_manager,
+                ),
                 CurriculumCallback(self.curriculum_manager, verbose=1),
                 LearningRateCallback(verbose=0),
             ]
