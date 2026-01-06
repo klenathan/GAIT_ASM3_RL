@@ -70,13 +70,13 @@ COLOR_PANEL_BG = (20, 20, 40)
 COLOR_PANEL_BORDER = (100, 100, 150)
 
 # Model Output Visualization Colors
-COLOR_ACTION_BAR_HIGH = (50, 200, 100)    # Green - high probability
-COLOR_ACTION_BAR_LOW = (100, 100, 120)    # Dim - low probability
-COLOR_VALUE_POSITIVE = (100, 200, 255)    # Blue - positive value
-COLOR_VALUE_NEGATIVE = (255, 100, 100)    # Red - negative value
-COLOR_ACTION_SELECTED = (255, 255, 100)   # Yellow - selected action
-COLOR_ENTROPY_HIGH = (100, 255, 100)      # Green - high entropy (exploring)
-COLOR_ENTROPY_LOW = (255, 100, 100)       # Red - low entropy (confident)
+COLOR_ACTION_BAR_HIGH = (50, 200, 100)  # Green - high probability
+COLOR_ACTION_BAR_LOW = (100, 100, 120)  # Dim - low probability
+COLOR_VALUE_POSITIVE = (100, 200, 255)  # Blue - positive value
+COLOR_VALUE_NEGATIVE = (255, 100, 100)  # Red - negative value
+COLOR_ACTION_SELECTED = (255, 255, 100)  # Yellow - selected action
+COLOR_ENTROPY_HIGH = (100, 255, 100)  # Green - high entropy (exploring)
+COLOR_ENTROPY_LOW = (255, 100, 100)  # Red - low entropy (confident)
 
 # Entity Parameters
 PLAYER_RADIUS = 15
@@ -129,18 +129,18 @@ REWARD_HIT_SPAWNER = 0.1
 REWARD_ENEMY_DESTROYED = 0.01
 REWARD_SHOT_FIRED = 0.0
 REWARD_QUICK_SPAWNER_KILL = 0.2
-REWARD_AIMING = 0.2                # Reward for pointing at an enemy/spawner
-AIMING_ANGLE_THRESHOLD = 0.1        # Radians (approx 11 degrees)
-REWARD_ACCURATE_SHOT = 0.1          # Reward for shooting while aiming correctly
-REWARD_APPROACH_SPAWNER = 0.2       # Reward for moving closer to spawners
-REWARD_STYLE2_ALIGNMENT_BONUS = 0.8 # Extra reward for Style 2 alignment
+REWARD_AIMING = 0.2  # Reward for pointing at an enemy/spawner
+AIMING_ANGLE_THRESHOLD = 0.1  # Radians (approx 11 degrees)
+REWARD_ACCURATE_SHOT = 0.1  # Reward for shooting while aiming correctly
+REWARD_APPROACH_SPAWNER = 0.2  # Reward for moving closer to spawners
+REWARD_STYLE2_ALIGNMENT_BONUS = 0.8  # Extra reward for Style 2 alignment
 
 # Activity Penalties (discourage passive/corner-hiding play)
-PENALTY_INACTIVITY = 0          # Per-step penalty when not moving enough
-PENALTY_CORNER = -0.1               # Per-step penalty when too close to edges
-CORNER_MARGIN = 80                  # Distance from edge to be considered "in corner"
-PENALTY_WALL_PROXIMITY = -0.1       # Penalty for being too close to walls
-WALL_MARGIN = 50                    # Distance from wall to trigger penalty
+PENALTY_INACTIVITY = 0  # Per-step penalty when not moving enough
+PENALTY_CORNER = -0.1  # Per-step penalty when too close to edges
+CORNER_MARGIN = 80  # Distance from edge to be considered "in corner"
+PENALTY_WALL_PROXIMITY = -0.1  # Penalty for being too close to walls
+WALL_MARGIN = 50  # Distance from wall to trigger penalty
 INACTIVITY_VELOCITY_THRESHOLD = 0.5  # Minimum velocity magnitude to be "active"
 
 # Reward Shaping
@@ -153,8 +153,8 @@ CURRICULUM_ENABLED = True
 CURRICULUM_MODE = "auto"  # "manual" or "auto"
 AUTO_CURRICULUM_STAGES = 10  # Number of stages for automated curriculum
 CURRICULUM_ADVANCEMENT_THRESHOLD = 1  # Spawner kill rate to advance
-CURRICULUM_MIN_EPISODES = 100            # Min episodes before advancing
-CURRICULUM_WINDOW = 100                 # Episodes for averaging
+CURRICULUM_MIN_EPISODES = 100  # Min episodes before advancing
+CURRICULUM_WINDOW = 100  # Episodes for averaging
 
 # Parallel Environments
 NUM_ENVS_DEFAULT_MPS = 20
@@ -167,7 +167,7 @@ CHECKPOINT_FREQ = 10_000
 
 # Legacy paths (for backward compatibility with old models)
 TENSORBOARD_LOG_DIR = "./logs"  # Deprecated: kept for reference only
-MODEL_SAVE_DIR = "./models"      # Deprecated: kept for reference only
+MODEL_SAVE_DIR = "./models"  # Deprecated: kept for reference only
 
 # ============================================================================
 # STRUCTURED CONFIGURATIONS
@@ -177,6 +177,7 @@ MODEL_SAVE_DIR = "./models"      # Deprecated: kept for reference only
 @dataclass
 class TrainerConfig:
     """Configuration for the training run."""
+
     algo: str
     style: int
     total_timesteps: int = 100_000
@@ -193,9 +194,9 @@ class TrainerConfig:
     # Whether to reset timesteps in SB3 learn(); when resuming, typically False
     reset_num_timesteps: bool = True
     # Transfer learning fine-grained control
-    load_vecnormalize: bool = True   # Load VecNormalize stats if available
-    load_curriculum: bool = True      # Restore curriculum progress
-    load_replay_buffer: bool = True   # Load replay buffer (DQN only)
+    load_vecnormalize: bool = True  # Load VecNormalize stats if available
+    load_curriculum: bool = True  # Restore curriculum progress
+    load_replay_buffer: bool = True  # Load replay buffer (DQN only)
 
     # Learning rate schedule
     lr_schedule: str = "cosine"  # "constant", "linear", "exponential", "cosine"
@@ -204,13 +205,13 @@ class TrainerConfig:
     lr_warmup_fraction: float = 0.0
 
     # DQN specific
-    dqn_hidden_layers: List[int] = field(
-        default_factory=lambda: [256, 128, 64])
+    dqn_hidden_layers: List[int] = field(default_factory=lambda: [256, 128, 64])
     dqn_activation: str = "SiLU"
 
     # PPO specific
     ppo_net_arch: Dict[str, List[int]] = field(
-        default_factory=lambda: dict(pi=[256, 128, 64], vf=[256, 128, 64]))
+        default_factory=lambda: dict(pi=[256, 128, 64], vf=[256, 128, 64])
+    )
     ppo_activation: str = "SiLU"
 
     # LSTM specific
@@ -219,9 +220,22 @@ class TrainerConfig:
     ppo_lstm_n_layers: int = 1
 
     # A2C specific
-    a2c_net_arch: Dict[str, List[int]] = field(default_factory=lambda: dict(
-        pi=[384, 256, 256, 128, 64], vf=[256, 128, 128, 64]))
+    a2c_net_arch: Dict[str, List[int]] = field(
+        default_factory=lambda: dict(
+            pi=[384, 256, 256, 128, 64], vf=[256, 128, 128, 64]
+        )
+    )
     a2c_activation: str = "SiLU"
+
+    # Scaled DQN specific architecture configuration
+    scaled_dqn_shared_layers: List[int] = field(
+        default_factory=lambda: [512, 512, 384, 384, 256]
+    )
+    scaled_dqn_value_layers: List[int] = field(default_factory=lambda: [256, 128])
+    scaled_dqn_advantage_layers: List[int] = field(default_factory=lambda: [256, 128])
+    scaled_dqn_activation: str = "SiLU"
+    scaled_dqn_use_layer_norm: bool = True
+    scaled_dqn_use_residual: bool = True
 
 
 @dataclass
@@ -291,10 +305,7 @@ class PPOLSTMHyperparams(PPOHyperparams):
 # Default hyperparameter instances (equivalent to old config)
 DQN_DEFAULT = DQNHyperparams()
 DQN_GPU_DEFAULT = DQNHyperparams(
-    buffer_size=200_000,
-    batch_size=256,
-    gradient_steps=2,
-    learning_starts=2000
+    buffer_size=200_000, batch_size=256, gradient_steps=2, learning_starts=2000
 )
 
 PPO_DEFAULT = PPOHyperparams()
@@ -305,3 +316,62 @@ PPO_LSTM_GPU_DEFAULT = PPOLSTMHyperparams(batch_size=64)
 
 A2C_DEFAULT = A2CHyperparams()
 A2C_GPU_DEFAULT = A2CHyperparams(n_steps=256)
+
+
+# ============================================================================
+# SCALED DQN CONFIGURATION
+# ============================================================================
+
+
+@dataclass
+class ScaledDQNHyperparams:
+    """
+    Hyperparameters for Scaled DQN with deep 10-layer dueling architecture.
+
+    These hyperparameters are optimized for deep networks with:
+    - 10 layers (5 shared + 3 value + 3 advantage)
+    - ~1.2M parameters (6x more than standard DQN)
+    - Residual connections and layer normalization
+    - Industry-standard values for stable training
+    """
+
+    # Learning rate (lower for deep networks)
+    learning_rate: float = 1e-4
+
+    # Replay buffer (larger for better sampling diversity)
+    buffer_size: int = 1_000_000
+    batch_size: int = 256  # Larger batches for gradient stability
+
+    # Discount factor
+    gamma: float = 0.99
+
+    # Exploration (epsilon-greedy)
+    exploration_fraction: float = 0.15  # 15% of training
+    exploration_initial_eps: float = 1.0
+    exploration_final_eps: float = 0.01  # Lower final epsilon
+
+    # Target network updates
+    target_update_interval: int = 2000  # More frequent updates
+
+    # Training frequency
+    train_freq: int = 4  # Train every 4 steps
+    gradient_steps: int = 2  # Multiple gradient steps per update
+    learning_starts: int = 10_000  # More warmup for deep network
+
+    # Gradient clipping (prevent exploding gradients)
+    max_grad_norm: float = 10.0
+
+    # Other settings
+    verbose: int = 1
+
+
+# Default instances for CPU and GPU
+SCALED_DQN_DEFAULT = ScaledDQNHyperparams()
+
+SCALED_DQN_GPU_DEFAULT = ScaledDQNHyperparams(
+    learning_rate=2e-4,  # Higher LR for GPU (larger batches)
+    buffer_size=2_000_000,  # Larger buffer on GPU
+    batch_size=512,  # Larger batches on GPU
+    gradient_steps=4,  # More gradient steps on GPU
+    learning_starts=20_000,  # More warmup on GPU
+)
