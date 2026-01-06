@@ -323,7 +323,7 @@ def get_default_stages() -> List[CurriculumStage]:
             min_survival_steps=300,  # Short episodes OK
             max_survival_steps=2500,  # Don't camp forever
             min_damage_dealt=20.0,  # Must deal SOME damage
-            min_episodes=30,  # Quick stage
+            min_episodes=75,  # Quick stage
         ),
         # Grade 2: DAMAGE SPAWNER (Learn to Shoot)
         # Goal: Learn to SHOOT and HIT spawner consistently
@@ -341,7 +341,7 @@ def get_default_stages() -> List[CurriculumStage]:
             min_survival_steps=350,  # Short episodes
             max_survival_steps=2400,  # Don't camp
             min_damage_dealt=50.0,  # Must deal decent damage
-            min_episodes=40,
+            min_episodes=200,
         ),
         # Grade 3: KILL 1 SPAWNER (First Full Kill)
         # Goal: Destroy a spawner completely
@@ -359,7 +359,7 @@ def get_default_stages() -> List[CurriculumStage]:
             min_survival_steps=400,  # Reasonable time
             max_survival_steps=2300,  # Don't be too slow
             min_damage_dealt=80.0,  # Good damage
-            min_episodes=50,
+            min_episodes=2000,
         ),
         # Grade 4: KILL MULTIPLE SPAWNERS (Get Efficient)
         # Goal: Kill spawners efficiently, handle phases
@@ -375,9 +375,9 @@ def get_default_stages() -> List[CurriculumStage]:
             min_spawner_kill_rate=1.5,  # Must be efficient
             min_win_rate=0.0,  # No wins yet
             min_survival_steps=500,  # Reasonable time
-            max_survival_steps=2200,  # Don't be passive
+            max_survival_steps=2000,  # Don't be passive
             min_damage_dealt=120.0,  # High damage
-            min_episodes=75,
+            min_episodes=1000,
         ),
         # Grade 5: INTRODUCE ENEMIES (Slow & Weak)
         # Goal: Maintain spawner focus while avoiding enemies
