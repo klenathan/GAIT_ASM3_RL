@@ -28,17 +28,25 @@ FPS = 60
 ACTION_SPACE_STYLE_1 = 5  # Rotation, Thrust, Shoot
 ACTION_SPACE_STYLE_2 = 6  # Directional (4), Shoot
 
+<<<<<<< HEAD
 # Observation Space Layout (44 dims total) - Agent-Relative Coordinates:
 # [0]     Distance from arena center (normalized to max_dist)
 # [1]     Angle to arena center (normalized 0-1 from -π to π)
 # [2]     Velocity magnitude (speed, normalized to max velocity)
 # [3]     Velocity direction angle (absolute world angle, normalized 0-1)
 # [4]     Player rotation (normalized)
+=======
+# Observation Space Layout (44 dims total):
+# [0-1]   Player position (x, y)
+# [2-3]   Player velocity (vx, vy)
+# [4]     Player rotation
+>>>>>>> origin/main
 # [5]     Player health ratio
 # [6]     Shoot cooldown ratio (0 = ready)
 # [7]     Current phase ratio
 # [8]     Spawners remaining ratio
 # [9]     Time remaining ratio
+<<<<<<< HEAD
 # [10-12] Nearest enemy 1 (dist, angle relative to player rotation, exists)
 # [13-15] Nearest enemy 2 (dist, angle relative to player rotation, exists)
 # [16-19] Nearest spawner 1 (dist, angle relative to player rotation, exists, health)
@@ -50,6 +58,19 @@ ACTION_SPACE_STYLE_2 = 6  # Directional (4), Shoot
 # [36-38] Nearest projectile 5 (dist, angle relative to player rotation, exists)
 # [39-42] Wall distances (left, right, top, bottom) - distance-based
 # [43]    Enemy count (normalized)
+=======
+# [10-12] Nearest enemy 1 (dist, angle, exists)
+# [13-15] Nearest enemy 2 (dist, angle, exists)
+# [16-19] Nearest spawner 1 (dist, angle, exists, health)
+# [20-23] Nearest spawner 2 (dist, angle, exists, health)
+# [24-26] Nearest projectile 1 (dist, angle, exists)
+# [27-29] Nearest projectile 2 (dist, angle, exists)
+# [30-32] Nearest projectile 3 (dist, angle, exists)
+# [33-35] Nearest projectile 4 (dist, angle, exists)
+# [36-38] Nearest projectile 5 (dist, angle, exists)
+# [39-42] Wall distances (left, right, top, bottom)
+# [43]    Enemy count
+>>>>>>> origin/main
 OBS_DIM = 44
 
 # Threat detection
@@ -83,70 +104,163 @@ COLOR_ENTROPY_LOW = (255, 100, 100)  # Red - low entropy (confident)
 # Entity Parameters
 PLAYER_RADIUS = 15
 PLAYER_MAX_HEALTH = 150
-PLAYER_SPEED = 5.0
-PLAYER_ROTATION_SPEED = 5.0
+PLAYER_SPEED = 7.0
+PLAYER_ROTATION_SPEED = 6.0
 PLAYER_THRUST = 0.3
 PLAYER_MAX_VELOCITY = 6.0
 PLAYER_FRICTION = 0.97
-PLAYER_SHOOT_COOLDOWN = 10
+PLAYER_SHOOT_COOLDOWN = 5
 
 ENEMY_RADIUS = 12
 ENEMY_HEALTH = 10
-ENEMY_SPEED = 2.0
-ENEMY_DAMAGE = 10
-ENEMY_SHOOT_COOLDOWN = 60
+ENEMY_SPEED = 1.0
+ENEMY_DAMAGE = 5
+ENEMY_SHOOT_COOLDOWN = 260
 ENEMY_SHOOT_PROBABILITY = 0.3
 
-SPAWNER_RADIUS = 25
+SPAWNER_RADIUS = 35
 SPAWNER_HEALTH = 100
-SPAWNER_SPAWN_COOLDOWN = 120
-SPAWNER_MAX_ENEMIES = 8
+SPAWNER_SPAWN_COOLDOWN = 420
+SPAWNER_MAX_ENEMIES = 4
 
 PROJECTILE_RADIUS = 3
 PROJECTILE_SPEED = 8.0
-PROJECTILE_DAMAGE = 10
-PROJECTILE_LIFETIME = 120
+PROJECTILE_DAMAGE = 5
+PROJECTILE_LIFETIME = 420
 
 # Phase System
 PHASE_CONFIG = [
-    {"spawners": 1, "enemy_speed_mult": 1.0, "spawn_rate_mult": 1.0},
-    {"spawners": 2, "enemy_speed_mult": 0.9, "spawn_rate_mult": 0.9},
-    {"spawners": 3, "enemy_speed_mult": 0.8, "spawn_rate_mult": 0.85},
-    {"spawners": 4, "enemy_speed_mult": 0.7, "spawn_rate_mult": 0.8},
-    {"spawners": 5, "enemy_speed_mult": 0.75, "spawn_rate_mult": 0.75},
+    {"spawners": 1, "enemy_speed_mult": 1.0, "spawn_rate_mult": 0.8},
+    {"spawners": 1, "enemy_speed_mult": 0.9, "spawn_rate_mult": 0.9},
+    {"spawners": 1, "enemy_speed_mult": 0.8, "spawn_rate_mult": 0.3},
+    {"spawners": 2, "enemy_speed_mult": 0.6, "spawn_rate_mult": 0.2},
+    {"spawners": 3, "enemy_speed_mult": 0.5, "spawn_rate_mult": 0.1},
 ]
 MAX_PHASES = len(PHASE_CONFIG)
 
-# Reward Structure
+# ============================================================================
+# STYLE-SPECIFIC CONFIGURATIONS
+# ============================================================================
+
+
+@dataclass
+class ControlStyleConfig:
+    """Base configuration for control style-specific parameters."""
+
+    # Reward Structure
+    max_steps: int = 3000
+    reward_enemy_destroyed: float = 5.0
+    reward_spawner_destroyed: float = 75.0
+    reward_phase_complete: float = 0.0
+    reward_damage_taken: float = -2.0
+    reward_death: float = -100.0
+    reward_step_survival: float = -0.01
+    reward_hit_enemy: float = 2.0
+    reward_hit_spawner: float = 2.0
+    reward_shot_fired: float = 0.0
+    reward_quick_spawner_kill: float = 50.0
+
+    # Activity Penalties
+    penalty_inactivity: float = 0.0
+    penalty_corner: float = -0.1
+    corner_margin: float = 80.0
+    inactivity_velocity_threshold: float = 0.5
+
+    # Reward Shaping
+    shaping_mode: str = "delta"
+    shaping_scale: float = 1.0
+    shaping_clip: float = 0.2
+
+    # Curriculum Learning
+    curriculum_enabled: bool = True
+
+    # Style 2 specific: Aiming guidance for shooting (defaults that have no effect for style 1)
+    # Bonus given ONLY when shooting while aimed at spawner (prevents exploitation)
+    reward_aim_spawner_max: float = 0.0  # No aim bonus by default (Style 1)
+    aim_cone_degrees: float = 30.0  # Degrees from center for any bonus
+
+
+@dataclass
+class Style1Config(ControlStyleConfig):
+    """
+    Configuration for Style 1: Rotation + Thrust + Shoot
+
+    This style requires mastery of:
+    - Rotational control and momentum management
+    - Precise aiming while moving
+    - Physics-based movement (inertia, friction)
+    """
+
+    # Style 1 may benefit from stronger shaping initially due to rotation complexity
+    shaping_scale: float = 1.2
+    # Slightly longer episodes to account for rotation learning curve
+    max_steps: int = 3500
+    # Encourage more active play with rotation
+    penalty_inactivity: float = -0.05
+
+
+@dataclass
+class Style2Config(ControlStyleConfig):
+    """
+    Configuration for Style 2: Directional (4-way) + Shoot (fixed angle)
+
+    This style requires mastery of:
+    - Positioning and spacing
+    - Managing fixed shooting angle
+    - Direct movement without momentum
+    - Aligning position so fixed nozzle points at spawners
+    """
+
+    # Style 2 benefits from stronger shaping to learn positioning for fixed angle
+    shaping_scale: float = 1.2
+    # Standard episode length
+    max_steps: int = 3000
+    # Less penalty for "inactivity" since style 2 has no momentum
+    penalty_inactivity: float = 0.0
+
+    # Style 2 specific: Aiming bonus given ONLY when shooting while aimed at spawner
+    # This encourages shooting when well-positioned without allowing passive exploitation
+    reward_aim_spawner_max: float = (
+        0.3  # Bonus when shooting while aimed at spawner center
+    )
+    aim_cone_degrees: float = 30.0  # Degrees from center for any bonus (0 outside cone)
+
+
+# Factory function to get style-specific config
+def get_style_config(style: int) -> ControlStyleConfig:
+    """Get the appropriate configuration for the given control style."""
+    if style == 1:
+        return Style1Config()
+    elif style == 2:
+        return Style2Config()
+    else:
+        raise ValueError(f"Unknown control style: {style}")
+
+
+# Legacy global constants (kept for backward compatibility)
+# These will be deprecated - use get_style_config() instead
 MAX_STEPS = 3000
-STEP_REWARD = 0.1
 REWARD_ENEMY_DESTROYED = 5.0
 REWARD_SPAWNER_DESTROYED = 75.0
-REWARD_PHASE_COMPLETE = 100.0
+REWARD_PHASE_COMPLETE = 0.0
 REWARD_DAMAGE_TAKEN = -2.0
 REWARD_DEATH = -100.0
-REWARD_STEP_SURVIVAL = -0.1
+REWARD_STEP_SURVIVAL = -0.01
 REWARD_HIT_ENEMY = 2.0
-REWARD_HIT_SPAWNER = 10.0
+REWARD_HIT_SPAWNER = 2.0
 REWARD_SHOT_FIRED = 0.0
 REWARD_QUICK_SPAWNER_KILL = 50.0
-
-# Activity Penalties (discourage passive/corner-hiding play)
-PENALTY_INACTIVITY = -0.05  # Per-step penalty when not moving enough
-PENALTY_CORNER = -0.1  # Per-step penalty when too close to edges
-CORNER_MARGIN = 80  # Distance from edge to be considered "in corner"
-INACTIVITY_VELOCITY_THRESHOLD = 0.5  # Minimum velocity magnitude to be "active"
-
-# Reward Shaping
-SHAPING_MODE = "delta"  # Simpler selection
+PENALTY_INACTIVITY = 0.0
+PENALTY_CORNER = -0.1
+CORNER_MARGIN = 80.0
+INACTIVITY_VELOCITY_THRESHOLD = 0.5
+SHAPING_MODE = "delta"
 SHAPING_SCALE = 1.0
 SHAPING_CLIP = 0.2
-
-# Curriculum Learning
 CURRICULUM_ENABLED = True
-CURRICULUM_ADVANCEMENT_THRESHOLD = 1  # Spawner kill rate to advance
-CURRICULUM_MIN_EPISODES = 100  # Min episodes before advancing
-CURRICULUM_WINDOW = 100  # Episodes for averaging
+CURRICULUM_ADVANCEMENT_THRESHOLD = 1
+CURRICULUM_MIN_EPISODES = 100
+CURRICULUM_WINDOW = 100
 
 # Parallel Environments
 NUM_ENVS_DEFAULT_MPS = 20
@@ -192,7 +306,7 @@ class TrainerConfig:
 
     # Learning rate schedule
     lr_schedule: str = "cosine"  # "constant", "linear", "exponential", "cosine"
-    lr_end: Optional[float] = 1e-6  # Final LR; defaults to start_lr * 0.1
+    lr_end: Optional[float] = 1e-5  # Final LR; defaults to start_lr * 0.1
     # Fraction of training for warmup (0 = none)
     lr_warmup_fraction: float = 0.0
 
@@ -202,7 +316,7 @@ class TrainerConfig:
 
     # PPO specific
     ppo_net_arch: Dict[str, List[int]] = field(
-        default_factory=lambda: dict(pi=[128, 64, 32], vf=[128, 64, 32])
+        default_factory=lambda: dict(pi=[256, 128, 64], vf=[256, 128, 64])
     )
     ppo_activation: str = "SiLU"
 
@@ -297,3 +411,11 @@ PPO_LSTM_GPU_DEFAULT = PPOLSTMHyperparams(batch_size=64)
 
 A2C_DEFAULT = A2CHyperparams()
 A2C_GPU_DEFAULT = A2CHyperparams(n_steps=256)
+
+# ============================================================================
+# AUDIO SETTINGS
+# ============================================================================
+
+AUDIO_ENABLED = True  # Master switch for audio (disable for headless training)
+AUDIO_VOLUME_MASTER = 0.7  # Master volume (0.0 to 1.0)
+AUDIO_SOUND_DIR = "arena/sound"  # Directory containing sound files

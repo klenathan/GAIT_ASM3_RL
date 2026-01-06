@@ -69,6 +69,12 @@ def main():
     parser.add_argument('--checkpoint-only', action='store_true',
                        help='Only search in checkpoints/ directories')
     
+    # Curriculum options
+    parser.add_argument('--curriculum-stage', type=int, default=None, choices=[0, 1, 2, 3, 4, 5],
+                       help='Curriculum stage (0-5). None=full difficulty.')
+    parser.add_argument('--auto-curriculum', action='store_true',
+                       help='Auto-detect curriculum stage from training state file')
+    
     args = parser.parse_args()
     
     try:
@@ -124,6 +130,13 @@ def main():
         
         if args.output:
             cmd.extend(['--output', args.output])
+        
+        # Pass curriculum options
+        if args.curriculum_stage is not None:
+            cmd.extend(['--curriculum-stage', str(args.curriculum_stage)])
+        
+        if args.auto_curriculum:
+            cmd.append('--auto-curriculum')
         
         print(f"\nRunning evaluation with {args.episodes} episodes...")
         print(f"Command: {' '.join(cmd)}\n")

@@ -260,10 +260,11 @@ class ArenaDictEnv(gym.Env):
 
         if self.renderer:
             metrics = {
-                "episode": 0,
-                "episode_reward": self.episode_reward,
-                "total_reward": self.episode_reward,
-                "timesteps": self.current_step,
+                'episode': 0,
+                'episode_reward': self.episode_reward,
+                'total_reward': self.episode_reward,
+                'timesteps': self.current_step,
+                'show_inputs': True,  # Show model inputs during rendering
             }
             self.renderer.render(self, metrics)
 
@@ -286,17 +287,7 @@ class ArenaDictEnv(gym.Env):
 
         for i in range(num):
             x, y = self._get_spawner_position_smart(i, num)
-
-            # Add small random jitter
-            x += self.np_random.uniform(-30, 30)
-            y += self.np_random.uniform(-30, 30)
-            x = utils.clamp(
-                x, config.SPAWNER_RADIUS, config.GAME_WIDTH - config.SPAWNER_RADIUS
-            )
-            y = utils.clamp(
-                y, config.SPAWNER_RADIUS, config.GAME_HEIGHT - config.SPAWNER_RADIUS
-            )
-
+            
             # Apply curriculum modifiers
             spawn_rate_mult = phase_cfg["spawn_rate_mult"]
             health_mult = 1.0
@@ -315,51 +306,38 @@ class ArenaDictEnv(gym.Env):
         self._prev_player_health = None
 
     def _get_spawner_position_smart(self, spawner_index, total_spawners):
-        """
-        Distribute spawners intelligently based on count:
-        - 1 spawner: Center-top
-        - 2 spawners: Left and right edges
-        - 3 spawners: Triangle formation (top, bottom-left, bottom-right)
-        - 4 spawners: Four corners
-        - 5 spawners: Four corners + center
-        """
-        margin = 200
+        """Generate random spawner position with minimum distance from player spawn."""
+        margin = 100  # Minimum distance from arena edges
+        min_dist_from_player = 250  # Minimum distance from player spawn (center-bottom)
+        min_dist_between_spawners = 150  # Minimum distance between spawners
+        
         w, h = config.GAME_WIDTH, config.GAME_HEIGHT
-
-        positions = []
-        if total_spawners == 1:
-            positions = [(w / 2, margin)]
-        elif total_spawners == 2:
-            positions = [(margin, h / 2), (w - margin, h / 2)]
-        elif total_spawners == 3:
-            positions = [
-                (w / 2, margin),
-                (margin, h - margin),
-                (w - margin, h - margin),
-            ]
-        elif total_spawners == 4:
-            positions = [
-                (margin, margin),
-                (w - margin, margin),
-                (margin, h - margin),
-                (w - margin, h - margin),
-            ]
-        elif total_spawners == 5:
-            positions = [
-                (margin, margin),
-                (w - margin, margin),
-                (margin, h - margin),
-                (w - margin, h - margin),
-                (w / 2, h / 2),
-            ]
-        else:
-            # Fallback: circular pattern
-            angle = (2 * math.pi / total_spawners) * spawner_index
-            dist = min(w, h) * 0.4
-            return w / 2 + math.cos(angle) * dist, h / 2 + math.sin(angle) * dist
-
-        return positions[spawner_index]
-
+        player_spawn = (w / 2, h - 50)  # Player spawns at center-bottom
+        
+        max_attempts = 100
+        for _ in range(max_attempts):
+            x = self.np_random.uniform(margin, w - margin)
+            y = self.np_random.uniform(margin, h - margin)
+            
+            # Check distance from player spawn
+            dist_to_player = math.sqrt((x - player_spawn[0])**2 + (y - player_spawn[1])**2)
+            if dist_to_player < min_dist_from_player:
+                continue
+            
+            # Check distance from existing spawners
+            too_close = False
+            for spawner in self.spawners:
+                dist = math.sqrt((x - spawner.pos[0])**2 + (y - spawner.pos[1])**2)
+                if dist < min_dist_between_spawners:
+                    too_close = True
+                    break
+            
+            if not too_close:
+                return x, y
+        
+        # Fallback: return random position if no valid spot found
+        return self.np_random.uniform(margin, w - margin), self.np_random.uniform(margin, h - margin)
+    
     def _get_observation(self):
         """
         Build dictionary observation with semantic grouping.
@@ -372,50 +350,17 @@ class ArenaDictEnv(gym.Env):
 
         # --- Player State (7 dims) with agent-relative coordinates ---
         player_state = np.zeros(7, dtype=np.float32)
-
-        # Arena center
-        center_x = config.GAME_WIDTH / 2
-        center_y = config.GAME_HEIGHT / 2
-
-        # [0] Distance from center (normalized)
-        dist_from_center = math.sqrt(
-            (self.player.pos[0] - center_x) ** 2 + (self.player.pos[1] - center_y) ** 2
-        )
-        player_state[0] = dist_from_center / max_dist
-
-        # [1] Angle to center (normalized from -π to π → 0 to 1)
-        angle_to_center = utils.angle_to_point(
-            self.player.pos, np.array([center_x, center_y])
-        )
-        player_state[1] = utils.normalize_angle(angle_to_center)
-
-        # [2] Velocity magnitude (speed, normalized)
-        velocity_magnitude = math.sqrt(
-            self.player.velocity[0] ** 2 + self.player.velocity[1] ** 2
-        )
-        player_state[2] = np.clip(velocity_magnitude / config.PLAYER_MAX_VELOCITY, 0, 1)
-
-        # [3] Velocity direction angle (absolute world angle, normalized)
-        if velocity_magnitude > 0.01:  # Avoid division by zero
-            velocity_angle = math.atan2(
-                self.player.velocity[1], self.player.velocity[0]
-            )
-            player_state[3] = utils.normalize_angle(velocity_angle)
-        else:
-            player_state[3] = 0.5  # Neutral value when not moving
-
-        # [4] Player rotation (normalized)
-        player_state[4] = self.player.rotation / (2 * math.pi)
-
-        # [5] Player health ratio
-        player_state[5] = self.player.get_health_ratio()
-
-        # [6] Shoot cooldown ratio
-        player_state[6] = self.player.shoot_cooldown / config.PLAYER_SHOOT_COOLDOWN
-
+        player_state[0] = self.player.pos[0] / config.GAME_WIDTH  # x position
+        player_state[1] = self.player.pos[1] / config.GAME_HEIGHT  # y position
+        player_state[2] = np.clip(self.player.velocity[0] / config.PLAYER_MAX_VELOCITY, -1, 1)  # vx
+        player_state[3] = np.clip(self.player.velocity[1] / config.PLAYER_MAX_VELOCITY, -1, 1)  # vy
+        player_state[4] = self.player.rotation / (2 * math.pi)  # rotation
+        player_state[5] = self.player.get_health_ratio()  # health ratio
+        player_state[6] = self.player.shoot_cooldown / config.PLAYER_SHOOT_COOLDOWN  # cooldown
+        
         # --- Combat Targets (29 dims) ---
         combat = np.zeros(29, dtype=np.float32)
-
+        
         # Nearest 2 enemies (dist, angle, exists) x2 = 6 dims
         nearest_enemies = self._find_k_nearest_entities(self.enemies, k=2)
         for i, enemy in enumerate(nearest_enemies):
@@ -453,28 +398,19 @@ class ArenaDictEnv(gym.Env):
                 combat[base_idx + 2] = 1.0
                 combat[base_idx + 3] = spawner.health / spawner.max_health
             else:
-                combat[base_idx : base_idx + 4] = [1.0, 0.5, 0.0, 0.0]
-
+                combat[base_idx:base_idx + 4] = [1.0, 0.5, 0.0, 0.0]
+        
         # Nearest 5 projectiles (dist, angle, exists) x5 = 15 dims at indices 14-28
-        nearest_projectiles = self._find_k_nearest_projectiles(k=5)
-        for i, proj in enumerate(nearest_projectiles):
-            base_idx = 14 + i * 3  # Start after 6 enemy + 8 spawner dims
-            if proj:
-                combat[base_idx] = utils.distance(self.player.pos, proj.pos) / max_dist
-                combat[base_idx + 1] = utils.normalize_angle(
-                    utils.relative_angle(
-                        self.player.rotation,
-                        utils.angle_to_point(self.player.pos, proj.pos),
-                    )
-                )
+        nearest_projectiles = self._get_nearest_projectiles(k=5)
+        for i, proj_info in enumerate(nearest_projectiles):
+            base_idx = 14 + i * 3
+            if proj_info:
+                combat[base_idx] = proj_info['dist'] / max_dist
+                combat[base_idx + 1] = proj_info['angle']
                 combat[base_idx + 2] = 1.0
             else:
-                combat[base_idx], combat[base_idx + 1], combat[base_idx + 2] = (
-                    1.0,
-                    0.5,
-                    0.0,
-                )
-
+                combat[base_idx:base_idx + 3] = [1.0, 0.5, 0.0]
+        
         # --- Mission Progress (3 dims) ---
         mission = np.zeros(3, dtype=np.float32)
         mission[0] = self.current_phase / config.MAX_PHASES  # current phase
@@ -524,53 +460,35 @@ class ArenaDictEnv(gym.Env):
         while len(result) < k:
             result.append(None)
         return result
-
-    def _find_k_nearest_projectiles(self, k=5):
-        """Find k nearest enemy projectiles, returns list padded with None if fewer exist."""
-        enemy_projectiles = [
-            (p, utils.distance(self.player.pos, p.pos))
-            for p in self.projectiles
-            if p.alive and not p.is_player_projectile
-        ]
-        enemy_projectiles.sort(key=lambda x: x[1])
-
-        result = [p for p, _ in enemy_projectiles[:k]]
+    
+    def _get_nearest_projectiles(self, k=5):
+        """Get info about k nearest threatening projectiles (enemy projectiles only).
+        
+        Returns:
+            List of k dicts with 'dist' and 'angle' keys, padded with None if fewer exist.
+        """
+        enemy_projectiles = [p for p in self.projectiles 
+                            if p.alive and not p.is_player_projectile]
+        
+        # Calculate distance and angle for each projectile
+        proj_info = []
+        for proj in enemy_projectiles:
+            dist = utils.distance(self.player.pos, proj.pos)
+            angle = utils.normalize_angle(
+                utils.relative_angle(self.player.rotation,
+                                    utils.angle_to_point(self.player.pos, proj.pos)))
+            proj_info.append({'dist': dist, 'angle': angle})
+        
+        # Sort by distance and take k nearest
+        proj_info.sort(key=lambda x: x['dist'])
+        result = proj_info[:k]
+        
         # Pad with None if fewer than k projectiles
         while len(result) < k:
             result.append(None)
+        
         return result
-
-    def _get_projectile_threat_info(self):
-        """Get info about threatening projectiles (enemy projectiles only)."""
-        max_dist = math.sqrt(config.GAME_WIDTH**2 + config.GAME_HEIGHT**2)
-        enemy_projectiles = [
-            p for p in self.projectiles if p.alive and not p.is_player_projectile
-        ]
-
-        if not enemy_projectiles:
-            return max_dist, 0.5, 0
-
-        min_dist = float("inf")
-        nearest_angle = 0.5
-        for proj in enemy_projectiles:
-            dist = utils.distance(self.player.pos, proj.pos)
-            if dist < min_dist:
-                min_dist = dist
-                nearest_angle = utils.normalize_angle(
-                    utils.relative_angle(
-                        self.player.rotation,
-                        utils.angle_to_point(self.player.pos, proj.pos),
-                    )
-                )
-
-        danger_count = sum(
-            1
-            for p in enemy_projectiles
-            if utils.distance(self.player.pos, p.pos) < config.PROJECTILE_DANGER_RADIUS
-        )
-
-        return min_dist, nearest_angle, danger_count
-
+    
     def _handle_collisions(self):
         """Handle all collision detection and return reward."""
         reward = 0.0

@@ -426,10 +426,11 @@ class ArenaCNNEnv(gym.Env):
 
         if self.renderer:
             metrics = {
-                "episode": 0,
-                "episode_reward": self.episode_reward,
-                "total_reward": self.episode_reward,
-                "timesteps": self.current_step,
+                'episode': 0,
+                'episode_reward': self.episode_reward,
+                'total_reward': self.episode_reward,
+                'timesteps': self.current_step,
+                'show_inputs': True,  # Show model inputs during rendering
             }
             self.renderer.render(self, metrics)
 
@@ -454,17 +455,7 @@ class ArenaCNNEnv(gym.Env):
 
         for i in range(num):
             x, y = self._get_spawner_position_smart(i, num)
-
-            # Add random jitter
-            x += self.np_random.uniform(-30, 30)
-            y += self.np_random.uniform(-30, 30)
-            x = utils.clamp(
-                x, config.SPAWNER_RADIUS, config.GAME_WIDTH - config.SPAWNER_RADIUS
-            )
-            y = utils.clamp(
-                y, config.SPAWNER_RADIUS, config.GAME_HEIGHT - config.SPAWNER_RADIUS
-            )
-
+            
             # Apply curriculum modifiers
             spawn_rate_mult = phase_cfg["spawn_rate_mult"]
             health_mult = 1.0
@@ -483,43 +474,38 @@ class ArenaCNNEnv(gym.Env):
         self._prev_player_health = None
 
     def _get_spawner_position_smart(self, spawner_index, total_spawners):
-        """Distribute spawners intelligently."""
-        margin = 200
+        """Generate random spawner position with minimum distance from player spawn."""
+        margin = 100  # Minimum distance from arena edges
+        min_dist_from_player = 250  # Minimum distance from player spawn (center-bottom)
+        min_dist_between_spawners = 150  # Minimum distance between spawners
+        
         w, h = config.GAME_WIDTH, config.GAME_HEIGHT
-
-        positions = []
-        if total_spawners == 1:
-            positions = [(w / 2, margin)]
-        elif total_spawners == 2:
-            positions = [(margin, h / 2), (w - margin, h / 2)]
-        elif total_spawners == 3:
-            positions = [
-                (w / 2, margin),
-                (margin, h - margin),
-                (w - margin, h - margin),
-            ]
-        elif total_spawners == 4:
-            positions = [
-                (margin, margin),
-                (w - margin, margin),
-                (margin, h - margin),
-                (w - margin, h - margin),
-            ]
-        elif total_spawners == 5:
-            positions = [
-                (margin, margin),
-                (w - margin, margin),
-                (margin, h - margin),
-                (w - margin, h - margin),
-                (w / 2, h / 2),
-            ]
-        else:
-            angle = (2 * math.pi / total_spawners) * spawner_index
-            dist = min(w, h) * 0.4
-            return w / 2 + math.cos(angle) * dist, h / 2 + math.sin(angle) * dist
-
-        return positions[spawner_index]
-
+        player_spawn = (w / 2, h - 50)  # Player spawns at center-bottom
+        
+        max_attempts = 100
+        for _ in range(max_attempts):
+            x = self.np_random.uniform(margin, w - margin)
+            y = self.np_random.uniform(margin, h - margin)
+            
+            # Check distance from player spawn
+            dist_to_player = math.sqrt((x - player_spawn[0])**2 + (y - player_spawn[1])**2)
+            if dist_to_player < min_dist_from_player:
+                continue
+            
+            # Check distance from existing spawners
+            too_close = False
+            for spawner in self.spawners:
+                dist = math.sqrt((x - spawner.pos[0])**2 + (y - spawner.pos[1])**2)
+                if dist < min_dist_between_spawners:
+                    too_close = True
+                    break
+            
+            if not too_close:
+                return x, y
+        
+        # Fallback: return random position if no valid spot found
+        return self.np_random.uniform(margin, w - margin), self.np_random.uniform(margin, h - margin)
+    
     def _handle_collisions(self):
         """Handle all collision detection and return reward."""
         reward = 0.0

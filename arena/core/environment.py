@@ -4,6 +4,7 @@ Main environment implementing the Gym API with dual control schemes.
 """
 
 from arena.ui.renderer import ArenaRenderer
+from arena.audio.sound_manager import SoundManager
 from arena.game.entities import Player, Enemy, Spawner, Projectile
 from arena.game import utils
 from arena.core.curriculum import CurriculumManager, CurriculumStage
@@ -44,6 +45,9 @@ class ArenaEnv(gym.Env):
         self.render_mode = render_mode
         self.curriculum_manager = curriculum_manager
 
+        # Load style-specific configuration
+        self.style_config = config.get_style_config(control_style)
+
         if control_style == 1:
             self.action_space = spaces.Discrete(config.ACTION_SPACE_STYLE_1)
         else:
@@ -58,6 +62,14 @@ class ArenaEnv(gym.Env):
         if render_mode == "human":
             self.renderer = ArenaRenderer()
             self._owns_renderer = True
+
+        # Initialize sound manager (enabled only in human mode by default)
+        enable_audio = render_mode == "human" and config.AUDIO_ENABLED
+        self.sound_manager = SoundManager(
+            enabled=enable_audio,
+            sound_dir=config.AUDIO_SOUND_DIR,
+            volume=config.AUDIO_VOLUME_MASTER,
+        )
 
         self.player = None
         self.enemies = []
@@ -79,6 +91,9 @@ class ArenaEnv(gym.Env):
         self._prev_enemy_count = None
         self._prev_player_health = None
         self.phase_start_step = 0
+        self._shot_this_step = (
+            False  # Track if player shot this step (for Style 2 aim bonus)
+        )
 
     @property
     def curriculum_stage(self) -> CurriculumStage:
@@ -128,6 +143,7 @@ class ArenaEnv(gym.Env):
         # Reset step-level counters
         self.enemies_destroyed_this_step = 0
         self.spawners_destroyed_this_step = 0
+        self._shot_this_step = False  # Reset shot tracking for Style 2 aim bonus
 
         if self.control_style == 1:
             self.player.update_style_1(action)
@@ -138,7 +154,8 @@ class ArenaEnv(gym.Env):
             self.control_style == 2 and action == 5
         ):
             if self.player.shoot():
-                reward += float(config.REWARD_SHOT_FIRED)
+                self._shot_this_step = True  # Mark that we shot this step
+                reward += float(self.style_config.reward_shot_fired)
                 # Both styles use player.rotation for shooting
                 # Style 1: rotation follows player's facing direction
                 # Style 2: rotation is fixed (randomized at episode start)
@@ -149,6 +166,7 @@ class ArenaEnv(gym.Env):
                     is_player_projectile=True,
                 )
                 self.projectiles.append(proj)
+                self.sound_manager.play("player_shoot", volume_multiplier=0.5)
 
         for enemy in self.enemies:
             if enemy.alive:
@@ -158,6 +176,7 @@ class ArenaEnv(gym.Env):
                     self.projectiles.append(
                         Projectile(enemy.pos[0], enemy.pos[1], angle, False)
                     )
+                    self.sound_manager.play("enemy_shoot", volume_multiplier=0.4)
 
         phase_cfg = config.PHASE_CONFIG[self.current_phase]
 
@@ -179,13 +198,14 @@ class ArenaEnv(gym.Env):
                     )
                     if new_enemy:
                         self.enemies.append(new_enemy)
+                        self.sound_manager.play("enemy_spawn", volume_multiplier=0.6)
 
         for proj in self.projectiles:
             if proj.alive:
                 proj.update()
 
         reward += self._handle_collisions()
-        reward += float(config.REWARD_STEP_SURVIVAL)
+        reward += float(self.style_config.reward_step_survival)
         reward += self._calculate_shaping_reward()
 
         self.enemies = [e for e in self.enemies if e.alive]
@@ -193,20 +213,23 @@ class ArenaEnv(gym.Env):
         self.projectiles = [p for p in self.projectiles if p.alive]
 
         if len(self.spawners) == 0:
-            reward += config.REWARD_PHASE_COMPLETE
+            reward += self.style_config.reward_phase_complete
+            self.sound_manager.play("phase_complete")
             self.current_phase += 1
             if self.current_phase < config.MAX_PHASES:
                 self._init_phase()
             else:
                 self.win = True
                 self.win_step = self.current_step
+                self.sound_manager.play("victory")
                 done = True
 
         if not self.player.alive:
-            reward += config.REWARD_DEATH
+            reward += self.style_config.reward_death
+            self.sound_manager.play("player_death")
             done = True
 
-        if self.current_step >= config.MAX_STEPS:
+        if self.current_step >= self.style_config.max_steps:
             done = True
 
         self.episode_reward += reward
@@ -225,6 +248,7 @@ class ArenaEnv(gym.Env):
                 "episode_reward": self.episode_reward,
                 "total_reward": self.episode_reward,
                 "timesteps": self.current_step,
+                "show_inputs": True,  # Show model inputs during rendering
             }
             self.renderer.render(self, metrics)
 
@@ -238,6 +262,8 @@ class ArenaEnv(gym.Env):
             self.renderer.close()
         self.renderer = None
         self._owns_renderer = False
+        if self.sound_manager:
+            self.sound_manager.cleanup()
 
     def _init_phase(self):
         phase_cfg = config.PHASE_CONFIG[self.current_phase]
@@ -246,16 +272,6 @@ class ArenaEnv(gym.Env):
 
         for i in range(num):
             x, y = self._get_spawner_position_smart(i, num)
-
-            # Add small random jitter
-            x += self.np_random.uniform(-30, 30)
-            y += self.np_random.uniform(-30, 30)
-            x = utils.clamp(
-                x, config.SPAWNER_RADIUS, config.GAME_WIDTH - config.SPAWNER_RADIUS
-            )
-            y = utils.clamp(
-                y, config.SPAWNER_RADIUS, config.GAME_HEIGHT - config.SPAWNER_RADIUS
-            )
 
             # Apply curriculum modifiers to spawner
             spawn_rate_mult = phase_cfg["spawn_rate_mult"]
@@ -275,50 +291,41 @@ class ArenaEnv(gym.Env):
         self._prev_player_health = None
 
     def _get_spawner_position_smart(self, spawner_index, total_spawners):
-        """
-        Distribute spawners intelligently based on count:
-        - 1 spawner: Center-top
-        - 2 spawners: Left and right edges
-        - 3 spawners: Triangle formation (top, bottom-left, bottom-right)
-        - 4 spawners: Four corners
-        - 5 spawners: Four corners + center
-        """
-        margin = 200
+        """Generate random spawner position with minimum distance from player spawn."""
+        margin = 100  # Minimum distance from arena edges
+        min_dist_from_player = 250  # Minimum distance from player spawn (center-bottom)
+        min_dist_between_spawners = 150  # Minimum distance between spawners
+
         w, h = config.GAME_WIDTH, config.GAME_HEIGHT
+        player_spawn = (w / 2, h - 50)  # Player spawns at center-bottom
 
-        positions = []
-        if total_spawners == 1:
-            positions = [(w / 2, margin)]
-        elif total_spawners == 2:
-            positions = [(margin, h / 2), (w - margin, h / 2)]
-        elif total_spawners == 3:
-            positions = [
-                (w / 2, margin),
-                (margin, h - margin),
-                (w - margin, h - margin),
-            ]
-        elif total_spawners == 4:
-            positions = [
-                (margin, margin),
-                (w - margin, margin),
-                (margin, h - margin),
-                (w - margin, h - margin),
-            ]
-        elif total_spawners == 5:
-            positions = [
-                (margin, margin),
-                (w - margin, margin),
-                (margin, h - margin),
-                (w - margin, h - margin),
-                (w / 2, h / 2),
-            ]
-        else:
-            # Fallback: circular pattern
-            angle = (2 * math.pi / total_spawners) * spawner_index
-            dist = min(w, h) * 0.4
-            return w / 2 + math.cos(angle) * dist, h / 2 + math.sin(angle) * dist
+        max_attempts = 100
+        for _ in range(max_attempts):
+            x = self.np_random.uniform(margin, w - margin)
+            y = self.np_random.uniform(margin, h - margin)
 
-        return positions[spawner_index]
+            # Check distance from player spawn
+            dist_to_player = math.sqrt(
+                (x - player_spawn[0]) ** 2 + (y - player_spawn[1]) ** 2
+            )
+            if dist_to_player < min_dist_from_player:
+                continue
+
+            # Check distance from existing spawners
+            too_close = False
+            for spawner in self.spawners:
+                dist = math.sqrt((x - spawner.pos[0]) ** 2 + (y - spawner.pos[1]) ** 2)
+                if dist < min_dist_between_spawners:
+                    too_close = True
+                    break
+
+            if not too_close:
+                return x, y
+
+        # Fallback: return random position if no valid spot found
+        return self.np_random.uniform(margin, w - margin), self.np_random.uniform(
+            margin, h - margin
+        )
 
     def _get_observation(self):
         """Build expanded observation vector (32 dims) with agent-relative coordinates."""
@@ -329,11 +336,9 @@ class ArenaEnv(gym.Env):
         center_x = config.GAME_WIDTH / 2
         center_y = config.GAME_HEIGHT / 2
 
-        # [0] Distance from center (normalized)
-        dist_from_center = math.sqrt(
-            (self.player.pos[0] - center_x) ** 2 + (self.player.pos[1] - center_y) ** 2
-        )
-        obs[0] = dist_from_center / max_dist
+        # [2-3] Player velocity
+        obs[2] = np.clip(self.player.velocity[0] / config.PLAYER_MAX_VELOCITY, -1, 1)
+        obs[3] = np.clip(self.player.velocity[1] / config.PLAYER_MAX_VELOCITY, -1, 1)
 
         # [1] Angle to center (normalized from -π to π → 0 to 1)
         angle_to_center = utils.angle_to_point(
@@ -416,28 +421,23 @@ class ArenaEnv(gym.Env):
                 ) = 1.0, 0.5, 0.0, 0.0
 
         # [24-38] Nearest 5 projectiles (dist, angle, exists) x5
-        nearest_projectiles = self._find_k_nearest_projectiles(k=5)
-        for i, proj in enumerate(nearest_projectiles):
+        nearest_projectiles = self._get_nearest_projectiles(k=5)
+        for i, proj_info in enumerate(nearest_projectiles):
             base_idx = 24 + i * 3
-            if proj:
-                obs[base_idx] = utils.distance(self.player.pos, proj.pos) / max_dist
-                obs[base_idx + 1] = utils.normalize_angle(
-                    utils.relative_angle(
-                        self.player.rotation,
-                        utils.angle_to_point(self.player.pos, proj.pos),
-                    )
-                )
+            if proj_info:
+                obs[base_idx] = proj_info["dist"] / max_dist
+                obs[base_idx + 1] = proj_info["angle"]
                 obs[base_idx + 2] = 1.0
             else:
                 obs[base_idx], obs[base_idx + 1], obs[base_idx + 2] = 1.0, 0.5, 0.0
 
         # [39-42] Wall distances (left, right, top, bottom) - normalized
         obs[39] = self.player.pos[0] / config.GAME_WIDTH  # Distance from left
-        obs[40] = 1.0 - (self.player.pos[0] / config.GAME_WIDTH)  # Distance from right
+        # Distance from right
+        obs[40] = 1.0 - (self.player.pos[0] / config.GAME_WIDTH)
         obs[41] = self.player.pos[1] / config.GAME_HEIGHT  # Distance from top
-        obs[42] = 1.0 - (
-            self.player.pos[1] / config.GAME_HEIGHT
-        )  # Distance from bottom
+        # Distance from bottom
+        obs[42] = 1.0 - (self.player.pos[1] / config.GAME_HEIGHT)
 
         # [43] Enemy count
         obs[43] = len([e for e in self.enemies if e.alive]) / config.SPAWNER_MAX_ENEMIES
@@ -457,53 +457,37 @@ class ArenaEnv(gym.Env):
             result.append(None)
         return result
 
-    def _find_k_nearest_projectiles(self, k=5):
-        """Find k nearest enemy projectiles, returns list padded with None if fewer exist."""
-        enemy_projectiles = [
-            (p, utils.distance(self.player.pos, p.pos))
-            for p in self.projectiles
-            if p.alive and not p.is_player_projectile
-        ]
-        enemy_projectiles.sort(key=lambda x: x[1])
+    def _get_nearest_projectiles(self, k=5):
+        """Get info about k nearest threatening projectiles (enemy projectiles only).
 
-        result = [p for p, _ in enemy_projectiles[:k]]
-        # Pad with None if fewer than k projectiles
-        while len(result) < k:
-            result.append(None)
-        return result
-
-    def _get_projectile_threat_info(self):
-        """Get info about threatening projectiles (enemy projectiles only)."""
-        max_dist = math.sqrt(config.GAME_WIDTH**2 + config.GAME_HEIGHT**2)
+        Returns:
+            List of k dicts with 'dist' and 'angle' keys, padded with None if fewer exist.
+        """
         enemy_projectiles = [
             p for p in self.projectiles if p.alive and not p.is_player_projectile
         ]
 
-        if not enemy_projectiles:
-            return max_dist, 0.5, 0  # Return max_dist, not inf
-
-        # Find nearest
-        min_dist = float("inf")
-        nearest_angle = 0.5
+        # Calculate distance and angle for each projectile
+        proj_info = []
         for proj in enemy_projectiles:
             dist = utils.distance(self.player.pos, proj.pos)
-            if dist < min_dist:
-                min_dist = dist
-                nearest_angle = utils.normalize_angle(
-                    utils.relative_angle(
-                        self.player.rotation,
-                        utils.angle_to_point(self.player.pos, proj.pos),
-                    )
+            angle = utils.normalize_angle(
+                utils.relative_angle(
+                    self.player.rotation,
+                    utils.angle_to_point(self.player.pos, proj.pos),
                 )
+            )
+            proj_info.append({"dist": dist, "angle": angle})
 
-        # Count projectiles within danger radius
-        danger_count = sum(
-            1
-            for p in enemy_projectiles
-            if utils.distance(self.player.pos, p.pos) < config.PROJECTILE_DANGER_RADIUS
-        )
+        # Sort by distance and take k nearest
+        proj_info.sort(key=lambda x: x["dist"])
+        result = proj_info[:k]
 
-        return min_dist, nearest_angle, danger_count
+        # Pad with None if fewer than k projectiles
+        while len(result) < k:
+            result.append(None)
+
+        return result
 
     def _find_nearest_entity(self, entities):
         """Find single nearest entity (kept for backward compatibility)."""
@@ -519,7 +503,7 @@ class ArenaEnv(gym.Env):
         reward = 0.0
 
         # Calculate damage penalty with curriculum scaling
-        damage_penalty = config.REWARD_DAMAGE_TAKEN
+        damage_penalty = self.style_config.reward_damage_taken
         if self.curriculum_stage:
             damage_penalty *= self.curriculum_stage.damage_penalty_mult
 
@@ -532,11 +516,15 @@ class ArenaEnv(gym.Env):
                 ):
                     enemy.take_damage(proj.damage)
                     proj.hit()
-                    reward += float(config.REWARD_HIT_ENEMY)
+                    reward += float(self.style_config.reward_hit_enemy)
+                    self.sound_manager.play("enemy_hit", volume_multiplier=0.5)
                     if not enemy.alive:
-                        reward += config.REWARD_ENEMY_DESTROYED
+                        reward += self.style_config.reward_enemy_destroyed
                         self.enemies_destroyed += 1
                         self.enemies_destroyed_this_step += 1
+                        self.sound_manager.play(
+                            "enemy_destroyed", volume_multiplier=0.7
+                        )
                     break
             if not proj.alive:
                 continue
@@ -546,17 +534,22 @@ class ArenaEnv(gym.Env):
                 ):
                     spawner.take_damage(proj.damage)
                     proj.hit()
-                    reward += float(config.REWARD_HIT_SPAWNER)
+                    reward += float(self.style_config.reward_hit_spawner)
+                    self.sound_manager.play("spawner_hit", volume_multiplier=0.6)
                     if not spawner.alive:
-                        reward += config.REWARD_SPAWNER_DESTROYED
+                        reward += self.style_config.reward_spawner_destroyed
                         self.spawners_destroyed += 1
                         self.spawners_destroyed_this_step += 1
                         # Heal player 50% when spawner is destroyed
                         self.player.heal(0.5)
+                        self.sound_manager.play(
+                            "spawner_destroyed", volume_multiplier=0.8
+                        )
+                        self.sound_manager.play("heal", volume_multiplier=0.5)
                         if self.first_spawner_kill_step is None:
                             self.first_spawner_kill_step = self.current_step
                         if (self.current_step - self.phase_start_step) < 500:
-                            reward += config.REWARD_QUICK_SPAWNER_KILL
+                            reward += self.style_config.reward_quick_spawner_kill
                     break
 
         # Apply curriculum-scaled damage penalty for projectile hits
@@ -569,6 +562,7 @@ class ArenaEnv(gym.Env):
                 self.player.take_damage(proj.damage)
                 proj.hit()
                 reward += damage_penalty
+                self.sound_manager.play("player_hit", volume_multiplier=0.7)
 
         # Apply curriculum-scaled damage penalty for enemy collisions
         for enemy in self.enemies:
@@ -582,6 +576,7 @@ class ArenaEnv(gym.Env):
                 self.player.take_damage(config.ENEMY_DAMAGE)
                 enemy.take_damage(enemy.max_health)
                 reward += damage_penalty
+                self.sound_manager.play("player_hit", volume_multiplier=0.8)
                 if not enemy.alive:
                     self.enemies_destroyed += 1
                     self.enemies_destroyed_this_step += 1
@@ -591,8 +586,11 @@ class ArenaEnv(gym.Env):
         """
         Combat efficiency shaping: rewards damage dealt while maintaining health.
         This encourages tactical play rather than reckless rushing.
+
+        Style-specific: Uses different shaping scales based on control style.
+        For Style 2: Also includes aiming and positioning guidance for fixed-angle shooting.
         """
-        if config.SHAPING_MODE == "off":
+        if self.style_config.shaping_mode == "off":
             return 0.0
 
         # Initialize tracking variables on first call or phase reset
@@ -636,14 +634,82 @@ class ArenaEnv(gym.Env):
         self._prev_enemy_count = len([e for e in self.enemies if e.alive])
         self._prev_player_health = self.player.health
 
-        # Apply curriculum scaling
-        shaping_scale = config.SHAPING_SCALE
+        # Apply style-specific and curriculum scaling
+        shaping_scale = self.style_config.shaping_scale
         if self.curriculum_stage:
             shaping_scale *= self.curriculum_stage.shaping_scale_mult
 
         # Normalize and scale
         reward = efficiency * shaping_scale * 0.01
-        return float(np.clip(reward, -config.SHAPING_CLIP, config.SHAPING_CLIP))
+        base_reward = float(
+            np.clip(
+                reward, -self.style_config.shaping_clip, self.style_config.shaping_clip
+            )
+        )
+
+        # Add Style 2 specific shaping: aiming and positioning guidance
+        if self.control_style == 2:
+            base_reward += self._calculate_style2_aim_position_bonus()
+
+        return base_reward
+
+    def _calculate_style2_aim_position_bonus(self):
+        """
+        Calculate aiming bonus for Style 2 (fixed-angle shooting).
+
+        IMPORTANT: This bonus is ONLY given when the agent shoots while aimed at a spawner.
+        This prevents exploitation where the agent just positions without shooting.
+
+        The reward structure encourages:
+        1. Shooting when aligned with spawner (higher bonus for better alignment)
+        2. Not shooting when misaligned (no bonus wasted)
+
+        The bonus is given at shot time, not continuously, to prevent passive exploitation.
+        """
+        # Only give bonus if agent shot this step
+        if not self._shot_this_step:
+            return 0.0
+
+        if not self.spawners:
+            return 0.0
+
+        player_rotation = self.player.rotation  # Fixed shooting angle for this episode
+        aim_cone_rad = math.radians(self.style_config.aim_cone_degrees)
+
+        # Find the nearest alive spawner
+        nearest_spawner = None
+        min_dist = float("inf")
+        for spawner in self.spawners:
+            if spawner.alive:
+                dist = utils.distance(self.player.pos, spawner.pos)
+                if dist < min_dist:
+                    min_dist = dist
+                    nearest_spawner = spawner
+
+        if nearest_spawner is None:
+            return 0.0
+
+        # Calculate angle from player to spawner
+        angle_to_spawner = utils.angle_to_point(self.player.pos, nearest_spawner.pos)
+
+        # Calculate the angular difference between nozzle direction and spawner direction
+        angle_diff = utils.relative_angle(player_rotation, angle_to_spawner)
+        abs_angle_diff = abs(angle_diff)
+
+        # Only give bonus if shooting within the aim cone (30 degrees)
+        if abs_angle_diff > aim_cone_rad:
+            return 0.0
+
+        # Bonus scales with alignment quality - better aim = more bonus
+        # Use cosine for smooth gradient: 1.0 at perfect aim, 0 at edge of cone
+        aim_factor = math.cos(abs_angle_diff * (math.pi / 2) / aim_cone_rad)
+        aim_bonus = self.style_config.reward_aim_spawner_max * aim_factor
+
+        # Apply curriculum scaling if applicable
+        if self.curriculum_stage:
+            aim_bonus *= self.curriculum_stage.shaping_scale_mult
+
+        return float(aim_bonus)
 
     def _get_info(self):
         return {
