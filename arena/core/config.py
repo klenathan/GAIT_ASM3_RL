@@ -70,13 +70,13 @@ COLOR_PANEL_BG = (20, 20, 40)
 COLOR_PANEL_BORDER = (100, 100, 150)
 
 # Model Output Visualization Colors
-COLOR_ACTION_BAR_HIGH = (50, 200, 100)    # Green - high probability
-COLOR_ACTION_BAR_LOW = (100, 100, 120)    # Dim - low probability
-COLOR_VALUE_POSITIVE = (100, 200, 255)    # Blue - positive value
-COLOR_VALUE_NEGATIVE = (255, 100, 100)    # Red - negative value
-COLOR_ACTION_SELECTED = (255, 255, 100)   # Yellow - selected action
-COLOR_ENTROPY_HIGH = (100, 255, 100)      # Green - high entropy (exploring)
-COLOR_ENTROPY_LOW = (255, 100, 100)       # Red - low entropy (confident)
+COLOR_ACTION_BAR_HIGH = (50, 200, 100)  # Green - high probability
+COLOR_ACTION_BAR_LOW = (100, 100, 120)  # Dim - low probability
+COLOR_VALUE_POSITIVE = (100, 200, 255)  # Blue - positive value
+COLOR_VALUE_NEGATIVE = (255, 100, 100)  # Red - negative value
+COLOR_ACTION_SELECTED = (255, 255, 100)  # Yellow - selected action
+COLOR_ENTROPY_HIGH = (100, 255, 100)  # Green - high entropy (exploring)
+COLOR_ENTROPY_LOW = (255, 100, 100)  # Red - low entropy (confident)
 
 # Entity Parameters
 PLAYER_RADIUS = 15
@@ -115,11 +115,98 @@ PHASE_CONFIG = [
 ]
 MAX_PHASES = len(PHASE_CONFIG)
 
-# Reward Structure
+# ============================================================================
+# STYLE-SPECIFIC CONFIGURATIONS
+# ============================================================================
+
+
+@dataclass
+class ControlStyleConfig:
+    """Base configuration for control style-specific parameters."""
+
+    # Reward Structure
+    max_steps: int = 3000
+    reward_enemy_destroyed: float = 5.0
+    reward_spawner_destroyed: float = 75.0
+    reward_phase_complete: float = 0.0
+    reward_damage_taken: float = -2.0
+    reward_death: float = -100.0
+    reward_step_survival: float = -0.01
+    reward_hit_enemy: float = 2.0
+    reward_hit_spawner: float = 2.0
+    reward_shot_fired: float = 0.0
+    reward_quick_spawner_kill: float = 50.0
+
+    # Activity Penalties
+    penalty_inactivity: float = 0.0
+    penalty_corner: float = -0.1
+    corner_margin: float = 80.0
+    inactivity_velocity_threshold: float = 0.5
+
+    # Reward Shaping
+    shaping_mode: str = "delta"
+    shaping_scale: float = 1.0
+    shaping_clip: float = 0.2
+
+    # Curriculum Learning
+    curriculum_enabled: bool = True
+
+
+@dataclass
+class Style1Config(ControlStyleConfig):
+    """
+    Configuration for Style 1: Rotation + Thrust + Shoot
+
+    This style requires mastery of:
+    - Rotational control and momentum management
+    - Precise aiming while moving
+    - Physics-based movement (inertia, friction)
+    """
+
+    # Style 1 may benefit from stronger shaping initially due to rotation complexity
+    shaping_scale: float = 1.2
+    # Slightly longer episodes to account for rotation learning curve
+    max_steps: int = 3500
+    # Encourage more active play with rotation
+    penalty_inactivity: float = -0.05
+
+
+@dataclass
+class Style2Config(ControlStyleConfig):
+    """
+    Configuration for Style 2: Directional (4-way) + Shoot (fixed angle)
+
+    This style requires mastery of:
+    - Positioning and spacing
+    - Managing fixed shooting angle
+    - Direct movement without momentum
+    """
+
+    # Style 2 can use less shaping as movement is simpler
+    shaping_scale: float = 0.8
+    # Standard episode length
+    max_steps: int = 3000
+    # Less penalty for "inactivity" since style 2 has no momentum
+    penalty_inactivity: float = 0.0
+
+
+# Factory function to get style-specific config
+def get_style_config(style: int) -> ControlStyleConfig:
+    """Get the appropriate configuration for the given control style."""
+    if style == 1:
+        return Style1Config()
+    elif style == 2:
+        return Style2Config()
+    else:
+        raise ValueError(f"Unknown control style: {style}")
+
+
+# Legacy global constants (kept for backward compatibility)
+# These will be deprecated - use get_style_config() instead
 MAX_STEPS = 3000
 REWARD_ENEMY_DESTROYED = 5.0
 REWARD_SPAWNER_DESTROYED = 75.0
-REWARD_PHASE_COMPLETE = 0 # 100.0
+REWARD_PHASE_COMPLETE = 0.0
 REWARD_DAMAGE_TAKEN = -2.0
 REWARD_DEATH = -100.0
 REWARD_STEP_SURVIVAL = -0.01
@@ -127,23 +214,17 @@ REWARD_HIT_ENEMY = 2.0
 REWARD_HIT_SPAWNER = 2.0
 REWARD_SHOT_FIRED = 0.0
 REWARD_QUICK_SPAWNER_KILL = 50.0
-
-# Activity Penalties (discourage passive/corner-hiding play)
-PENALTY_INACTIVITY = 0          # Per-step penalty when not moving enough
-PENALTY_CORNER = -0.1               # Per-step penalty when too close to edges
-CORNER_MARGIN = 80                  # Distance from edge to be considered "in corner"
-INACTIVITY_VELOCITY_THRESHOLD = 0.5  # Minimum velocity magnitude to be "active"
-
-# Reward Shaping
-SHAPING_MODE = "delta"  # Simpler selection
+PENALTY_INACTIVITY = 0.0
+PENALTY_CORNER = -0.1
+CORNER_MARGIN = 80.0
+INACTIVITY_VELOCITY_THRESHOLD = 0.5
+SHAPING_MODE = "delta"
 SHAPING_SCALE = 1.0
 SHAPING_CLIP = 0.2
-
-# Curriculum Learning
 CURRICULUM_ENABLED = True
-CURRICULUM_ADVANCEMENT_THRESHOLD = 1  # Spawner kill rate to advance
-CURRICULUM_MIN_EPISODES = 100            # Min episodes before advancing
-CURRICULUM_WINDOW = 100                 # Episodes for averaging
+CURRICULUM_ADVANCEMENT_THRESHOLD = 1
+CURRICULUM_MIN_EPISODES = 100
+CURRICULUM_WINDOW = 100
 
 # Parallel Environments
 NUM_ENVS_DEFAULT_MPS = 20
@@ -156,7 +237,7 @@ CHECKPOINT_FREQ = 10_000
 
 # Legacy paths (for backward compatibility with old models)
 TENSORBOARD_LOG_DIR = "./logs"  # Deprecated: kept for reference only
-MODEL_SAVE_DIR = "./models"      # Deprecated: kept for reference only
+MODEL_SAVE_DIR = "./models"  # Deprecated: kept for reference only
 
 # ============================================================================
 # STRUCTURED CONFIGURATIONS
@@ -166,6 +247,7 @@ MODEL_SAVE_DIR = "./models"      # Deprecated: kept for reference only
 @dataclass
 class TrainerConfig:
     """Configuration for the training run."""
+
     algo: str
     style: int
     total_timesteps: int = 100_000
@@ -182,9 +264,9 @@ class TrainerConfig:
     # Whether to reset timesteps in SB3 learn(); when resuming, typically False
     reset_num_timesteps: bool = True
     # Transfer learning fine-grained control
-    load_vecnormalize: bool = True   # Load VecNormalize stats if available
-    load_curriculum: bool = True      # Restore curriculum progress
-    load_replay_buffer: bool = True   # Load replay buffer (DQN only)
+    load_vecnormalize: bool = True  # Load VecNormalize stats if available
+    load_curriculum: bool = True  # Restore curriculum progress
+    load_replay_buffer: bool = True  # Load replay buffer (DQN only)
 
     # Learning rate schedule
     lr_schedule: str = "cosine"  # "constant", "linear", "exponential", "cosine"
@@ -193,13 +275,13 @@ class TrainerConfig:
     lr_warmup_fraction: float = 0.0
 
     # DQN specific
-    dqn_hidden_layers: List[int] = field(
-        default_factory=lambda: [256, 128, 64])
+    dqn_hidden_layers: List[int] = field(default_factory=lambda: [256, 128, 64])
     dqn_activation: str = "SiLU"
 
     # PPO specific
     ppo_net_arch: Dict[str, List[int]] = field(
-        default_factory=lambda: dict(pi=[256, 128, 64], vf=[256, 128, 64]))
+        default_factory=lambda: dict(pi=[256, 128, 64], vf=[256, 128, 64])
+    )
     ppo_activation: str = "SiLU"
 
     # LSTM specific
@@ -208,8 +290,11 @@ class TrainerConfig:
     ppo_lstm_n_layers: int = 1
 
     # A2C specific
-    a2c_net_arch: Dict[str, List[int]] = field(default_factory=lambda: dict(
-        pi=[384, 256, 256, 128, 64], vf=[256, 128, 128, 64]))
+    a2c_net_arch: Dict[str, List[int]] = field(
+        default_factory=lambda: dict(
+            pi=[384, 256, 256, 128, 64], vf=[256, 128, 128, 64]
+        )
+    )
     a2c_activation: str = "SiLU"
 
 
@@ -279,10 +364,7 @@ class PPOLSTMHyperparams(PPOHyperparams):
 # Default hyperparameter instances (equivalent to old config)
 DQN_DEFAULT = DQNHyperparams()
 DQN_GPU_DEFAULT = DQNHyperparams(
-    buffer_size=200_000,
-    batch_size=256,
-    gradient_steps=2,
-    learning_starts=2000
+    buffer_size=200_000, batch_size=256, gradient_steps=2, learning_starts=2000
 )
 
 PPO_DEFAULT = PPOHyperparams()
