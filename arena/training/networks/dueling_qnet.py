@@ -239,6 +239,35 @@ class DuelingQNetwork(nn.Module):
         """Get total number of trainable parameters."""
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
+    def set_training_mode(self, mode: bool) -> None:
+        """
+        Set training mode for the network.
+        
+        Args:
+            mode: If True, set to training mode. If False, set to eval mode.
+        """
+        if mode:
+            self.train()
+        else:
+            self.eval()
+
+    def _predict(self, obs: torch.Tensor, deterministic: bool = True) -> torch.Tensor:
+        """
+        Predict actions from observations.
+        
+        Args:
+            obs: Observation tensor of shape (batch_size, observation_dim)
+            deterministic: If True, return argmax action. If False, sample from epsilon-greedy
+                          (note: epsilon-greedy is handled by the policy, so this just returns argmax)
+        
+        Returns:
+            Action tensor of shape (batch_size,)
+        """
+        q_values = self(obs)
+        # For DQN, deterministic=True means greedy (argmax), False is handled by epsilon-greedy
+        # The actual epsilon-greedy exploration is handled by the DQN algorithm
+        return q_values.argmax(dim=1)
+
 
 def test_dueling_qnetwork():
     """Test function to verify network architecture."""

@@ -123,6 +123,9 @@ class ScaledDQNPolicy(DQNPolicy):
         This is called by the parent class during initialization.
         We override make_q_net(), so this will use our custom network.
         """
+        # First, initialize the features extractor
+        self.features_extractor = self.make_features_extractor()
+        
         # Build the main Q-network
         self.q_net = self.make_q_net()
 
@@ -130,8 +133,8 @@ class ScaledDQNPolicy(DQNPolicy):
         self.q_net_target = self.make_q_net()
         self.q_net_target.load_state_dict(self.q_net.state_dict())
 
-        # Target network is not trained
-        self.q_net_target.set_training_mode(False)
+        # Target network is not trained (set to eval mode)
+        self.q_net_target.eval()
 
         # Setup optimizer
         if self.optimizer_class is not None:

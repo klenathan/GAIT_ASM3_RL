@@ -18,6 +18,7 @@ from arena.training.registry import AlgorithmRegistry
 from arena.core.config import SCALED_DQN_DEFAULT, SCALED_DQN_GPU_DEFAULT
 from arena.training.utils import resolve_activation_fn
 from arena.training.schedules import get_lr_schedule
+from arena.training.policies.scaled_dqn_policy import ScaledDQNPolicy
 
 
 @AlgorithmRegistry.register("scaled_dqn")
@@ -46,7 +47,7 @@ class ScaledDQNTrainer(BaseTrainer):
 
     algorithm_name = "scaled_dqn"
     algorithm_class = DQN
-    policy_type = "ScaledDQNPolicy"  # Our custom policy
+    policy_type = ScaledDQNPolicy  # Our custom policy class
 
     def get_hyperparameters(self) -> Dict[str, Any]:
         """

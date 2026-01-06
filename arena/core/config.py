@@ -125,14 +125,14 @@ REWARD_DAMAGE_TAKEN = -0.01
 REWARD_DEATH = -1.0
 REWARD_STEP_SURVIVAL = -0.01
 REWARD_HIT_ENEMY = 0.01
-REWARD_HIT_SPAWNER = 0.1
+REWARD_HIT_SPAWNER = 0.2
 REWARD_ENEMY_DESTROYED = 0.01
 REWARD_SHOT_FIRED = 0.0
 REWARD_QUICK_SPAWNER_KILL = 0.2
-REWARD_AIMING = 0.2  # Reward for pointing at an enemy/spawner
+REWARD_AIMING = 0.01  # Reward for pointing at an enemy/spawner
 AIMING_ANGLE_THRESHOLD = 0.1  # Radians (approx 11 degrees)
 REWARD_ACCURATE_SHOT = 0.1  # Reward for shooting while aiming correctly
-REWARD_APPROACH_SPAWNER = 0.2  # Reward for moving closer to spawners
+REWARD_APPROACH_SPAWNER = 0.0  # Reward for moving closer to spawners
 REWARD_STYLE2_ALIGNMENT_BONUS = 0.8  # Extra reward for Style 2 alignment
 
 # Activity Penalties (discourage passive/corner-hiding play)
