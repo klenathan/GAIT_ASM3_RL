@@ -332,7 +332,7 @@ def get_style1_stages() -> List[CurriculumStage]:
         # Spawners are primary targets, moderate difficulty
         CurriculumStage(
             name="Grade 3: Spawner Targeting",
-            spawn_cooldown_mult=1.8,  # Faster spawns - spawners matter
+            spawn_cooldown_mult=10.0,  # Faster spawns - spawners matter
             max_enemies_mult=0.6,  # More enemies from spawners
             spawner_health_mult=0.65,  # Moderate spawner health
             enemy_speed_mult=0.9,  # Faster enemies
@@ -342,7 +342,7 @@ def get_style1_stages() -> List[CurriculumStage]:
             min_spawner_kill_rate=0.8,  # Must kill spawners regularly
             min_win_rate=0.0,  # Wins not required yet
             min_survival_steps=800,  # Good survival while targeting spawners
-            min_episodes=100,
+            min_episodes=120,
         ),
         # Grade 4: Multi-Target Management
         # Behavior Focus: Handling multiple threats simultaneously
@@ -373,7 +373,7 @@ def get_style1_stages() -> List[CurriculumStage]:
         # Emphasis on combat efficiency and win speed
         CurriculumStage(
             name="Grade 5: Aggressive Combat",
-            spawn_cooldown_mult=1.15,  # Fast spawns
+            spawn_cooldown_mult=1.1,  # Fast spawns
             max_enemies_mult=0.85,  # Many enemies
             spawner_health_mult=0.9,  # Strong spawners
             enemy_speed_mult=1.0,  # Full speed
@@ -439,69 +439,68 @@ def get_style2_stages() -> List[CurriculumStage]:
         # Very easy enemies, high shaping to learn the aiming-by-movement concept
         CurriculumStage(
             name="S2-Grade 0: Fixed Angle Aiming",
-            spawn_cooldown_mult=3.0,  # Very slow spawns - focus on positioning
+            spawn_cooldown_mult=10.0,  # Very slow spawns - focus on positioning
             max_enemies_mult=0.3,  # Very few enemies - minimal distraction
             spawner_health_mult=0.4,  # Very easy spawners - quick feedback
             enemy_speed_mult=0.5,  # Very slow enemies - safe to practice
-            shaping_scale_mult=3.0,  # High guidance for aiming/positioning
+            shaping_scale_mult=2.0,  # High guidance for aiming/positioning
             damage_penalty_mult=0.5,  # Low penalty - encourage experimentation
             # Advancement: Must demonstrate basic aiming ability
             min_spawner_kill_rate=0.5,  # Kill some spawners
             min_win_rate=0.0,  # Wins not required
             min_survival_steps=400,  # Basic survival
-            min_episodes=50,
+            min_episodes=30,
         ),
         # Grade 1: Positioning Basics
         # Learn to position for the fixed shooting angle
         CurriculumStage(
             name="S2-Grade 1: Positioning Basics",
-            spawn_cooldown_mult=2.0,  # Slower spawns
+            spawn_cooldown_mult=10.0,  # Slower spawns
             max_enemies_mult=0.5,  # Fewer enemies
             spawner_health_mult=0.6,  # Easier spawners
             enemy_speed_mult=0.8,  # Slower enemies
-            shaping_scale_mult=2.0,  # Moderate guidance
+            shaping_scale_mult=1.0,  # Moderate guidance
             damage_penalty_mult=0.8,  # Lower damage penalty
             # Advancement: Learn basic positioning
-            min_spawner_kill_rate=0.7,
+            min_spawner_kill_rate=0.8,
             min_win_rate=0.0,
             min_survival_steps=600,
-            min_episodes=75,
+            min_episodes=45,
         ),
         # Grade 2: Kiting and Spacing
         # Master movement while maintaining effective shooting position
         CurriculumStage(
             name="S2-Grade 2: Kiting and Spacing",
-            spawn_cooldown_mult=1.6,  # More spawns
+            spawn_cooldown_mult=1.0,  # More spawns
             max_enemies_mult=0.65,  # More enemies
             spawner_health_mult=0.75,  # Tougher spawners
             enemy_speed_mult=0.9,  # Faster enemies
-            shaping_scale_mult=1.5,  # Less guidance
-            damage_penalty_mult=1.0,  # Standard penalty
+            shaping_scale_mult=1.0,  # Less guidance
+            damage_penalty_mult=0.5,  # Standard penalty
             # Advancement: Demonstrate kiting ability
             min_spawner_kill_rate=1.0,
             min_win_rate=0.05,
-            min_survival_steps=700,
-            min_enemy_kill_rate=4.0,
-            min_episodes=100,
+            min_survival_steps=800,
+            min_enemy_kill_rate=1.0,
+            min_episodes=45,
         ),
         # Grade 3: Map Control
         # Control space while avoiding corners with fixed angle
         CurriculumStage(
             name="S2-Grade 3: Map Control",
-            spawn_cooldown_mult=1.3,  # Fast spawns
-            max_enemies_mult=0.8,  # Many enemies
+            spawn_cooldown_mult=0.7,  # Fast spawns
+            max_enemies_mult=0.65,  # Many enemies
             spawner_health_mult=0.85,  # Strong spawners
-            enemy_speed_mult=0.95,  # Fast enemies
-            shaping_scale_mult=1.2,  # Minimal guidance
-            damage_penalty_mult=1.1,  # Higher penalty
+            enemy_speed_mult=0.9,  # Fast enemies
+            shaping_scale_mult=1.0,  # Minimal guidance
+            damage_penalty_mult=1.0,  # Higher penalty
             # Advancement: Show map control
-            min_spawner_kill_rate=1.5,
-            min_win_rate=0.15,
-            min_survival_steps=700,
-            max_survival_steps=1800,
-            min_enemy_kill_rate=7.0,
-            min_damage_dealt=120.0,
-            min_episodes=150,
+            min_spawner_kill_rate=1.0,
+            min_win_rate=0.1,
+            min_survival_steps=800,
+            max_survival_steps=2500,
+            min_enemy_kill_rate=2.0,
+            min_episodes=45,
         ),
         # Grade 4: Advanced Tactics
         # Full difficulty with fixed angle mastery
@@ -518,10 +517,8 @@ def get_style2_stages() -> List[CurriculumStage]:
             min_win_rate=0.3,
             min_survival_steps=650,
             max_survival_steps=1600,
-            min_enemy_kill_rate=10.0,
-            min_damage_dealt=200.0,
-            max_damage_taken=140.0,
-            min_episodes=200,
+            min_enemy_kill_rate=3.0,
+            min_episodes=50,
         ),
         # Grade 5: Perfect Execution
         # Full difficulty - prove mastery of style 2
@@ -538,10 +535,8 @@ def get_style2_stages() -> List[CurriculumStage]:
             min_win_rate=0.5,
             min_survival_steps=600,
             max_survival_steps=1500,
-            min_enemy_kill_rate=13.0,
-            min_damage_dealt=280.0,
-            max_damage_taken=130.0,
-            min_episodes=250,
+            min_enemy_kill_rate=4.0,
+            min_episodes=100,
         ),
     ]
 

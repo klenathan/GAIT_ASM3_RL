@@ -96,26 +96,27 @@ ENEMY_RADIUS = 12
 ENEMY_HEALTH = 10
 ENEMY_SPEED = 1.0
 ENEMY_DAMAGE = 10
-ENEMY_SHOOT_COOLDOWN = 160
+ENEMY_SHOOT_COOLDOWN = 80
 ENEMY_SHOOT_PROBABILITY = 0.3
 
 SPAWNER_RADIUS = 35
 SPAWNER_HEALTH = 100
-SPAWNER_SPAWN_COOLDOWN = 420
-SPAWNER_MAX_ENEMIES = 4
+SPAWNER_SPAWN_COOLDOWN = 260
+SPAWNER_MAX_ENEMIES = 6
 
 PROJECTILE_RADIUS = 3
-PROJECTILE_SPEED = 8.0
-PROJECTILE_DAMAGE = 5
+PROJECTILE_SPEED = 9.0
+PROJECTILE_DAMAGE = 10
 PROJECTILE_LIFETIME = 420
 
 # Phase System
+# big spawn rate mult -> slower spawn rate
 PHASE_CONFIG = [
-    {"spawners": 1, "enemy_speed_mult": 1.0, "spawn_rate_mult": 0.8},
-    {"spawners": 1, "enemy_speed_mult": 0.9, "spawn_rate_mult": 0.9},
-    {"spawners": 1, "enemy_speed_mult": 0.8, "spawn_rate_mult": 0.3},
-    {"spawners": 2, "enemy_speed_mult": 0.6, "spawn_rate_mult": 0.2},
-    {"spawners": 3, "enemy_speed_mult": 0.5, "spawn_rate_mult": 0.1},
+    {"spawners": 1, "enemy_speed_mult": 1.0, "spawn_rate_mult": 0.9},
+    {"spawners": 1, "enemy_speed_mult": 0.9, "spawn_rate_mult": 0.8},
+    {"spawners": 1, "enemy_speed_mult": 0.8, "spawn_rate_mult": 0.7},
+    {"spawners": 2, "enemy_speed_mult": 0.6, "spawn_rate_mult": 0.3},
+    {"spawners": 3, "enemy_speed_mult": 0.5, "spawn_rate_mult": 0.2},
 ]
 MAX_PHASES = len(PHASE_CONFIG)
 
@@ -197,7 +198,7 @@ class Style2Config(ControlStyleConfig):
     reward_enemy_destroyed: float = 1
     reward_spawner_destroyed: float = 10.0
     reward_phase_complete: float = 0.0
-    reward_damage_taken: float = -0.5
+    reward_damage_taken: float = -1
     reward_death: float = -50.0
     reward_step_survival: float = -0.05
     reward_hit_enemy: float = 1
@@ -310,7 +311,7 @@ class TrainerConfig:
     lr_warmup_fraction: float = 0.0
 
     # DQN specific
-    dqn_hidden_layers: List[int] = field(default_factory=lambda: [384, 256, 128, 128, 64])
+    dqn_hidden_layers: List[int] = field(default_factory=lambda: [256, 128, 128, 64])
     dqn_activation: str = "SiLU"
 
     # PPO specific
@@ -339,7 +340,7 @@ class DQNHyperparams:
     buffer_size: int = 150_000
     batch_size: int = 128
     gamma: float = 0.99
-    exploration_fraction: float = 0.8
+    exploration_fraction: float = 0.85
     exploration_initial_eps: float = 1.0
     exploration_final_eps: float = 0.05
     target_update_interval: int = 1000
