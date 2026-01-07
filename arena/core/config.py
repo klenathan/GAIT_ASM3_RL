@@ -28,31 +28,23 @@ FPS = 60
 ACTION_SPACE_STYLE_1 = 5  # Rotation, Thrust, Shoot
 ACTION_SPACE_STYLE_2 = 6  # Directional (4), Shoot
 
-# Observation Space Layout (44 dims total):
+# Observation Space Layout (42 dims total):
 #
 # Note: For control style 2 only, the base vector is extended with 2 extra
 # features appended at the end:
-# [44-45] Nearest spawner relative position (dx, dy)
-# [0-1]   Player position (x, y)
-# [2-3]   Player velocity (vx, vy)
-# [4]     Player rotation
-# [5]     Player health ratio
-# [6]     Shoot cooldown ratio (0 = ready)
-# [7]     Current phase ratio
-# [8]     Spawners remaining ratio
-# [9]     Time remaining ratio
-# [10-12] Nearest enemy 1 (dist, angle, exists)
-# [13-15] Nearest enemy 2 (dist, angle, exists)
-# [16-19] Nearest spawner 1 (dist, angle, exists, health)
-# [20-23] Nearest spawner 2 (dist, angle, exists, health)
-# [24-26] Nearest projectile 1 (dist, angle, exists)
-# [27-29] Nearest projectile 2 (dist, angle, exists)
-# [30-32] Nearest projectile 3 (dist, angle, exists)
-# [33-35] Nearest projectile 4 (dist, angle, exists)
-# [36-38] Nearest projectile 5 (dist, angle, exists)
-# [39-42] Wall distances (left, right, top, bottom)
-# [43]    Enemy count
-OBS_DIM = 44
+# 0–3   Player position
+# 4–5   Player velocity
+# 6     Player rotation
+# 7     Player health
+# 8     Shoot cooldown
+# 9     Phase ratio
+# 10    Spawners remaining
+# 11    Time remaining
+# 12–17 Nearest 2 enemies
+# 18–25 Nearest 2 spawners
+# 26–40 Nearest 5 projectiles
+# 41    Enemy count
+OBS_DIM = 42
 
 # Threat detection
 PROJECTILE_DANGER_RADIUS = 150  # Radius to count nearby projectiles

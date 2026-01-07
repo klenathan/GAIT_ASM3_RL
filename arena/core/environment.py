@@ -335,45 +335,62 @@ class ArenaEnv(gym.Env):
         """Build observation vector.
 
         Base observation uses `config.OBS_DIM`.
-        Control style 2 appends 2 extra features: (dx, dy) to nearest spawner.
+		0–3   Player position
+		4–5   Player velocity
+		6     Player rotation
+		7     Player health
+		8     Shoot cooldown
+		9     Phase ratio
+		10    Spawners remaining
+		11    Time remaining
+		12–17 Nearest 2 enemies
+		18–25 Nearest 2 spawners
+		26–40 Nearest 5 projectiles
+		41    Enemy count
         """
-        obs_dim = config.OBS_DIM + (2 if self.control_style == 2 else 0)
-        obs = np.zeros(obs_dim, dtype=np.float32)
+        obs_dim = config.OBS_DIM
+        obs  = np.zeros(obs_dim, dtype=np.float32)
         max_dist = math.sqrt(config.GAME_WIDTH**2 + config.GAME_HEIGHT**2)
 
-        # [0-1] Player position
-        obs[0] = self.player.pos[0] / config.GAME_WIDTH
-        obs[1] = self.player.pos[1] / config.GAME_HEIGHT
+        # [0-3] Player position
+        # Didstance from left
+        obs[0] = self.player.pos[0] / config.GAME_WIDTH 
+        # Distance from right
+        obs[1] = 1.0 - (self.player.pos[0] / config.GAME_WIDTH)
+        # Distance from top
+        obs[2] = self.player.pos[1] / config.GAME_HEIGHT  
+        # Distance from bottom
+        obs[3] = 1.0 - (self.player.pos[1] / config.GAME_HEIGHT)
 
-        # [2-3] Player velocity
-        obs[2] = np.clip(self.player.velocity[0] / config.PLAYER_MAX_VELOCITY, -1, 1)
-        obs[3] = np.clip(self.player.velocity[1] / config.PLAYER_MAX_VELOCITY, -1, 1)
+        # [4-5] Player velocity
+        obs[4] = np.clip(self.player.velocity[0] / config.PLAYER_MAX_VELOCITY, -1, 1)
+        obs[5] = np.clip(self.player.velocity[1] / config.PLAYER_MAX_VELOCITY, -1, 1)
 
-        # [4] Player rotation
-        obs[4] = self.player.rotation / (2 * math.pi)
+        # [6] Player rotation
+        obs[6] = self.player.rotation / (2 * math.pi)
 
-        # [5] Player health ratio
-        obs[5] = self.player.get_health_ratio()
+        # [7] Player health ratio
+        obs[7] = self.player.get_health_ratio()
 
-        # [6] Shoot cooldown ratio (0 = ready to shoot)
-        obs[6] = self.player.shoot_cooldown / config.PLAYER_SHOOT_COOLDOWN
+        # [8] Shoot cooldown ratio (0 = ready to shoot)
+        obs[8] = self.player.shoot_cooldown / config.PLAYER_SHOOT_COOLDOWN
 
-        # [7] Current phase ratio
-        obs[7] = self.current_phase / config.MAX_PHASES
+        # [9] Current phase ratio
+        obs[9] = self.current_phase / config.MAX_PHASES
 
-        # [8] Spawners remaining ratio (for current phase objectives)
+        # [10] Spawners remaining ratio (for current phase objectives)
         # Clamp phase index to valid range (handles edge case when game ends after final phase)
         phase_idx = min(self.current_phase, config.MAX_PHASES - 1)
         initial_spawners = config.PHASE_CONFIG[phase_idx]["spawners"]
-        obs[8] = len([s for s in self.spawners if s.alive]) / max(initial_spawners, 1)
+        obs[10] = len([s for s in self.spawners if s.alive]) / max(initial_spawners, 1)
 
-        # [9] Time remaining ratio
-        obs[9] = 1.0 - (self.current_step / config.MAX_STEPS)
+        # [11] Time remaining ratio
+        obs[11] = 1.0 - (self.current_step / config.MAX_STEPS)
 
-        # [10-15] Nearest 2 enemies (dist, angle, exists) x2
+        # [12-17] Nearest 2 enemies (dist, angle, exists) x2
         nearest_enemies = self._find_k_nearest_entities(self.enemies, k=2)
         for i, enemy in enumerate(nearest_enemies):
-            base_idx = 10 + i * 3
+            base_idx = 12 + i * 3
             if enemy:
                 obs[base_idx] = utils.distance(self.player.pos, enemy.pos) / max_dist
                 obs[base_idx + 1] = utils.normalize_angle(
@@ -386,10 +403,10 @@ class ArenaEnv(gym.Env):
             else:
                 obs[base_idx], obs[base_idx + 1], obs[base_idx + 2] = 1.0, 0.5, 0.0
 
-        # [16-23] Nearest 2 spawners (dist, angle, exists, health) x2
+        # [18-25] Nearest 2 spawners (dist, angle, exists, health) x2
         nearest_spawners = self._find_k_nearest_entities(self.spawners, k=2)
         for i, spawner in enumerate(nearest_spawners):
-            base_idx = 16 + i * 4
+            base_idx = 18 + i * 4
             if spawner:
                 obs[base_idx] = utils.distance(self.player.pos, spawner.pos) / max_dist
                 obs[base_idx + 1] = utils.normalize_angle(
@@ -408,10 +425,10 @@ class ArenaEnv(gym.Env):
                     obs[base_idx + 3],
                 ) = 1.0, 0.5, 0.0, 0.0
 
-        # [24-38] Nearest 5 projectiles (dist, angle, exists) x5
+        # [26-40] Nearest 5 projectiles (dist, angle, exists) x5
         nearest_projectiles = self._get_nearest_projectiles(k=5)
         for i, proj_info in enumerate(nearest_projectiles):
-            base_idx = 24 + i * 3
+            base_idx = 26 + i * 3
             if proj_info:
                 obs[base_idx] = proj_info["dist"] / max_dist
                 obs[base_idx + 1] = proj_info["angle"]
@@ -419,28 +436,8 @@ class ArenaEnv(gym.Env):
             else:
                 obs[base_idx], obs[base_idx + 1], obs[base_idx + 2] = 1.0, 0.5, 0.0
 
-        # [39-42] Wall distances (left, right, top, bottom) - normalized
-        obs[39] = self.player.pos[0] / config.GAME_WIDTH  # Distance from left
-        # Distance from right
-        obs[40] = 1.0 - (self.player.pos[0] / config.GAME_WIDTH)
-        obs[41] = self.player.pos[1] / config.GAME_HEIGHT  # Distance from top
-        # Distance from bottom
-        obs[42] = 1.0 - (self.player.pos[1] / config.GAME_HEIGHT)
-
-        # [43] Enemy count
-        obs[43] = len([e for e in self.enemies if e.alive]) / config.SPAWNER_MAX_ENEMIES
-
-        # [44-45] (Style 2 only) Relative position to nearest spawner (dx, dy)
-        # if self.control_style == 2:
-        #     nearest_spawner = self._find_k_nearest_entities(self.spawners, k=1)[0]
-        #     if nearest_spawner:
-        #         dx = (nearest_spawner.pos[0] - self.player.pos[0]) / config.GAME_WIDTH
-        #         dy = (nearest_spawner.pos[1] - self.player.pos[1]) / config.GAME_HEIGHT
-        #         obs[44] = np.clip(dx, -1.0, 1.0)
-        #         obs[45] = np.clip(dy, -1.0, 1.0)
-        #     else:
-        #         obs[44] = 0.0
-        #         obs[45] = 0.0
+        # [41] Enemy count
+        obs[41] = len([e for e in self.enemies if e.alive]) / config.SPAWNER_MAX_ENEMIES
 
         return obs
 
