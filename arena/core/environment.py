@@ -431,16 +431,16 @@ class ArenaEnv(gym.Env):
         obs[43] = len([e for e in self.enemies if e.alive]) / config.SPAWNER_MAX_ENEMIES
 
         # [44-45] (Style 2 only) Relative position to nearest spawner (dx, dy)
-        if self.control_style == 2:
-            nearest_spawner = self._find_k_nearest_entities(self.spawners, k=1)[0]
-            if nearest_spawner:
-                dx = (nearest_spawner.pos[0] - self.player.pos[0]) / config.GAME_WIDTH
-                dy = (nearest_spawner.pos[1] - self.player.pos[1]) / config.GAME_HEIGHT
-                obs[44] = np.clip(dx, -1.0, 1.0)
-                obs[45] = np.clip(dy, -1.0, 1.0)
-            else:
-                obs[44] = 0.0
-                obs[45] = 0.0
+        # if self.control_style == 2:
+        #     nearest_spawner = self._find_k_nearest_entities(self.spawners, k=1)[0]
+        #     if nearest_spawner:
+        #         dx = (nearest_spawner.pos[0] - self.player.pos[0]) / config.GAME_WIDTH
+        #         dy = (nearest_spawner.pos[1] - self.player.pos[1]) / config.GAME_HEIGHT
+        #         obs[44] = np.clip(dx, -1.0, 1.0)
+        #         obs[45] = np.clip(dy, -1.0, 1.0)
+        #     else:
+        #         obs[44] = 0.0
+        #         obs[45] = 0.0
 
         return obs
 
