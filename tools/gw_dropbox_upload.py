@@ -54,6 +54,10 @@ import tempfile
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover
+    dropbox = object()  # type: ignore
 
 
 @dataclass(frozen=True)
@@ -235,48 +239,114 @@ def _dropbox_upload_directory_tree(
 def main(argv: list[str]) -> int:
     args = _parse_args(argv)
 
-    run_dir = Path(args.run).expanduser().resolve()
-    if not run_dir.exists():
-        raise FileNotFoundError(f"Run directory not found: {run_dir}")
-    if not run_dir.is_dir():
-        raise NotADirectoryError(f"--run must be a directory: {run_dir}")
+    src = args.src or args.run
+    if not src:
+        raise ValueError("One of --src/--run must be provided")
 
-    dest_dir = _assert_dropbox_path(str(args.dest))
+    source = Path(src).expanduser().resolve()
+    if not source.exists():
+        raise FileNotFoundError(f"Source path not found: {source}")
 
-    zip_name = args.zip_name or f"{run_dir.name}.zip"
-    if not zip_name.endswith(".zip"):
-        zip_name += ".zip"
+    dest = _assert_dropbox_path(str(args.dest))
 
-    dropbox_path = f"{dest_dir}/{zip_name}"
+    # Default behavior:
+    # - For files: upload the file into dest folder
+    # - For dirs: zip + upload into dest folder
+    zip_dir = False
+    if source.is_dir():
+        zip_dir = True
+        if args.no_zip:
+            zip_dir = False
+        elif args.zip:
+            zip_dir = True
+
+    token = None
+    if not args.dry_run:
+        token = _load_token(args)
 
     spec = UploadSpec(
-        run_dir=run_dir,
-        dropbox_dest_dir=dest_dir,
+        source=source,
+        dropbox_dest=dest,
+        zip_dir=zip_dir,
         overwrite=bool(args.overwrite),
         dry_run=bool(args.dry_run),
     )
 
-    print("Local run:", str(spec.run_dir))
-    print("Dropbox file:", dropbox_path)
+    print("Local source:", str(spec.source))
 
-    with tempfile.TemporaryDirectory(prefix="gw_dropbox_") as tmp:
-        zip_path = Path(tmp) / zip_name
-        _zip_run_dir(spec.run_dir, zip_path)
-        size_mb = zip_path.stat().st_size / (1024 * 1024)
-        sha = _sha256_file(zip_path)
-        print(f"Prepared zip: {zip_path.name} ({size_mb:.2f} MB)")
+    # File upload
+    if spec.source.is_file():
+        dropbox_file_path = f"{spec.dropbox_dest.rstrip('/')}/{spec.source.name}"
+        print("Dropbox file:", dropbox_file_path)
+
+        sha = _sha256_file(spec.source)
+        size_mb = spec.source.stat().st_size / (1024 * 1024)
+        print(f"File size: {size_mb:.2f} MB")
         print(f"SHA256: {sha}")
 
         if spec.dry_run:
             print("Dry-run: not uploading.")
             return 0
 
-        token = _load_token(args)
-        _dropbox_upload(
-            zip_path, token=token, dest_path=dropbox_path, overwrite=spec.overwrite
+        assert token is not None
+        _dropbox_upload_file(
+            source_file=spec.source,
+            token=token,
+            dest_path=dropbox_file_path,
+            overwrite=spec.overwrite,
         )
         print("Upload complete.")
+        return 0
 
+    # Directory upload
+    if spec.zip_dir:
+        zip_name = args.zip_name or f"{spec.source.name}.zip"
+        if not zip_name.endswith(".zip"):
+            zip_name += ".zip"
+
+        dropbox_zip_path = f"{spec.dropbox_dest.rstrip('/')}/{zip_name}"
+        print("Dropbox file:", dropbox_zip_path)
+
+        with tempfile.TemporaryDirectory(prefix="gw_dropbox_") as tmp:
+            zip_path = Path(tmp) / zip_name
+            _zip_directory(spec.source, zip_path)
+            size_mb = zip_path.stat().st_size / (1024 * 1024)
+            sha = _sha256_file(zip_path)
+            print(f"Prepared zip: {zip_path.name} ({size_mb:.2f} MB)")
+            print(f"SHA256: {sha}")
+
+            if spec.dry_run:
+                print("Dry-run: not uploading.")
+                return 0
+
+            assert token is not None
+            _dropbox_upload_file(
+                source_file=zip_path,
+                token=token,
+                dest_path=dropbox_zip_path,
+                overwrite=spec.overwrite,
+            )
+            print("Upload complete.")
+            return 0
+
+    # Directory tree upload (no zip)
+    dropbox_dir = spec.dropbox_dest
+    print("Dropbox directory:", dropbox_dir)
+
+    # Minimal preview in dry-run
+    if spec.dry_run:
+        files = [p for p in spec.source.rglob("*") if p.is_file()]
+        print(f"Dry-run: would upload {len(files)} files.")
+        return 0
+
+    assert token is not None
+    _dropbox_upload_directory_tree(
+        source_dir=spec.source,
+        token=token,
+        dest_dir=dropbox_dir,
+        overwrite=spec.overwrite,
+    )
+    print("Upload complete.")
     return 0
 
 
