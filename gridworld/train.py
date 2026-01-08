@@ -27,23 +27,23 @@ DEFAULT_COMMANDS = [
     ),
     (
         "Task 2: Level 1 Q-Learning",
-        "python -m gridworld.main --level 1 --algo q_learning --episodes 500000 --no_render  --save_model q_level1.pkl",
+        "python -m gridworld.main --level 1 --algo q_learning --episodes 100000 --no_render  --save_model q_level1.pkl",
     ),
     (
         "Task 2: Level 1 SARSA",
-        "python -m gridworld.main --level 1 --algo sarsa --episodes 500000 --no_render  --save_model sarsa_level1.pkl",
+        "python -m gridworld.main --level 1 --algo sarsa --episodes 100000 --no_render  --save_model sarsa_level1.pkl",
     ),
     (
         "Task 3: Level 2 Q-Learning",
-        "python -m gridworld.main --level 2 --algo q_learning --episodes 1000000 --no_render  --save_model q_level2.pkl",
+        "python -m gridworld.main --level 2 --algo q_learning --episodes 500000 --no_render  --save_model q_level2.pkl",
     ),
     (
         "Task 3: Level 3 SARSA",
-        "python -m gridworld.main --level 3 --algo sarsa --episodes 1000000 --no_render  --save_model sarsa_level3.pkl",
+        "python -m gridworld.main --level 3 --algo sarsa --episodes 500000 --no_render  --save_model sarsa_level3.pkl",
     ),
     (
         "Task 3: Level 3 Q-Learning",
-        "python -m gridworld.main --level 3 --algo q_learning --episodes 1000000 --no_render  --save_model q_level3.pkl",
+        "python -m gridworld.main --level 3 --algo q_learning --episodes 500000 --no_render  --save_model q_level3.pkl",
     ),
     (
         "Task 4: Level 4 Q-Learning",
@@ -59,11 +59,11 @@ DEFAULT_COMMANDS = [
     ),
     (
         "Task 5: Level 6 Q-Learning (Intrinsic)",
-        "python -m gridworld.main --level 6 --algo q_learning --episodes 1000000 --no_render  --intrinsic --save_model q_level6_intrinsic.pkl",
+        "python -m gridworld.main --level 6 --algo q_learning --episodes 100000 --no_render  --intrinsic --save_model q_level6_intrinsic.pkl",
     ),
     (
         "Task 5: Level 6 Q-Learning (Baseline)",
-        "python -m gridworld.main --level 6 --algo q_learning --episodes 1000000 --no_render  --save_model q_level6_baseline.pkl",
+        "python -m gridworld.main --level 6 --algo q_learning --episodes 100000 --no_render  --save_model q_level6_baseline.pkl",
     ),
 ]
 
