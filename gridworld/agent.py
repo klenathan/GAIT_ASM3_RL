@@ -44,12 +44,13 @@ class BaseAgent:
     def update(self, state, action, reward, next_state, next_action=None):
         raise NotImplementedError
 
-    def save(self, path):
+    def save(self, path, verbose=True):
         import pickle
 
         with open(path, "wb") as f:
             pickle.dump(self.q_table, f)
-        print(f"Model saved to {path}")
+        if verbose:
+            print(f"Model saved to {path}")
 
     def load(self, path):
         import pickle
@@ -68,8 +69,16 @@ class QLearningAgent(BaseAgent):
             self.q_table[next_state] = np.zeros(len(self.actions))
         max_next_q = np.max(self.q_table[next_state])
 
-        new_q = current_q + self.alpha * (reward + self.gamma * max_next_q - current_q)
+        td_target = reward + self.gamma * max_next_q
+        td_error = td_target - current_q
+
+        new_q = current_q + self.alpha * td_error
         self.q_table[state][action] = new_q
+
+        return {
+            "td_error": float(td_error),
+            "q_max": float(max_next_q),
+        }
 
 
 class SARSAAgent(BaseAgent):
@@ -79,5 +88,12 @@ class SARSAAgent(BaseAgent):
         # Q of next action (on-policy)
         next_q = self.get_q(next_state, next_action)
 
-        new_q = current_q + self.alpha * (reward + self.gamma * next_q - current_q)
+        td_target = reward + self.gamma * next_q
+        td_error = td_target - current_q
+
+        new_q = current_q + self.alpha * td_error
         self.q_table[state][action] = new_q
+
+        return {
+            "td_error": float(td_error),
+        }

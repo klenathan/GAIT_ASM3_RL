@@ -1,234 +1,237 @@
 # GridWorld Report
 
-This report documents the `gridworld/` tabular reinforcement learning (RL) implementation, focusing on (I) environment descriptions, (II) observation/state design, (III) reward design, and (IV) hyperparameter exploration.
+This report documents the `gridworld/` tabular RL implementation, focusing on:
+
+I. Description of environments  
+II. Observation design  
+III. Reward design  
+IV. Hyperparameter exploration
+
+The descriptions below reflect the **current code** in `gridworld/`.
 
 ## I. Description of Environments
 
 ### Core environment rules
 
-The environment is implemented in `gridworld/environment.py` as the `GridWorld` class.
+The environment is implemented by `GridWorld` in `gridworld/environment.py`.
 
 - **Grid size**: fixed at **10×10** (`GRID_WIDTH = GRID_HEIGHT = 10` in `gridworld/config.py`).
-- **Agent start**: resets to the top-left corner at `(row=0, col=0)`.
-- **Actions**: 4 discrete moves (no-op is not present):
+- **Agent start**: `(row=0, col=0)` on every `reset()`.
+- **Actions**: 4 discrete moves
   - `0`: Up, `1`: Down, `2`: Left, `3`: Right
-- **Movement constraints**:
-  - The agent cannot leave the grid.
-  - The agent cannot enter **rocks** (`'R'`), so moves into rocks are ignored.
-- **Terminal conditions**:
-  - Entering **fire** (`'F'`) ends the episode (death).
-  - Sharing a cell with a **monster** (`'M'`) ends the episode (death).
-  - Completing all objectives ends the episode (win).
+- **Collisions / movement constraints**:
+  - Off-grid moves are ignored.
+  - Moves into **rocks** (`R`) are ignored.
+- **Termination conditions**:
+  - **Fire** (`F`) is terminal with death.
+  - **Monster** (`M`) collision is terminal with death (checked both before and after monsters move).
+  - **Win** occurs when all objectives are completed (all apples collected and all chests opened).
 
-### Entities / tiles
+### Entities and their mechanics
 
-The level layouts are ASCII maps in `gridworld/config.py` (`LEVEL_0 ... LEVEL_6`). Tiles are parsed on reset.
+Levels are defined as ASCII layouts in `gridworld/config.py` and parsed during `reset()`.
 
-- `.` empty space
-- `R` rock / wall (impassable)
+- `.` empty cell
+- `R` rock (impassable)
 - `F` fire (hazard; terminal)
 - `A` apple (collectible)
-- `C` chest (collectible but requires key)
-- `K` key (enables opening any chest)
-- `M` monster (hazard that moves stochastically)
+- `K` key (enables opening chests)
+- `C` chest (collectible; only opens if the agent has a key)
+- `M` monster (hazard; stochastic movement)
 
-### Objectives and success criteria
+### Objective structure
 
-The win condition is checked each step:
+The environment supports multiple objectives:
 
-- **Win** if **all apples are collected** AND **all chests (if any) are opened**.
+- **Apples**: each apple gives reward once and then is considered collected.
+- **Chests**: each chest gives reward once but only after the key is obtained.
 
-This is implemented by comparing:
+Win condition (checked every step):
 
-- `len(collected_apples) == len(apples)`
-- `len(opened_chests) == len(chests)`
+- `len(collected_apples) == len(apples)` AND `len(opened_chests) == len(chests)`.
 
-### Monster dynamics
+This means a level with *no chests* is winnable by collecting all apples only.
 
-Monsters are represented as mutable `[r, c]` lists and move after the agent acts.
+### Monster dynamics (stochastic transitions)
 
-- For each monster, there is a **40% chance** of moving on a given step.
-- If moving, the monster picks a random direction uniformly from {up, down, left, right}.
-- Monsters obey bounds and cannot enter rocks.
-- After monsters move, collisions with the agent are checked again.
+Monsters move after the agent acts:
 
-### Level overview (0–6)
+- Each monster has a **40% chance** to move each step.
+- A moving monster chooses uniformly among the four cardinal directions.
+- Monsters cannot leave the grid and cannot enter rocks.
+- If a monster ends up on the agent after moving, the agent dies immediately.
 
-The code currently defines 7 levels in `LEVELS`:
+This makes the environment **stochastic**, and the transition distribution depends partly on random monster actions.
 
-- **Level 0 (basic navigation)**: mostly empty grid with a single apple near the bottom-right (`"........A."` on the last row).
-- **Level 1 (obstacles + hazard strip)**:
-  - Two horizontal rock barriers.
-  - A horizontal fire strip near the bottom.
-  - One apple near the bottom-right.
-- **Level 2 (key + chest + obstacles)**:
-  - Alternating rock columns near the top.
-  - One key (`K`) placed roughly mid-map.
-  - One chest (`C`) at the right edge.
-  - One apple near the bottom-right.
-- **Level 3**: currently set equal to Level 2 (`LEVEL_3 = LEVEL_2` placeholder).
-- **Level 4 (monsters)**:
-  - Two monsters placed in the open area.
-  - One apple near the bottom-right.
-- **Level 5**: currently set equal to Level 4 (`LEVEL_5 = LEVEL_4` placeholder).
-- **Level 6 (intrinsic reward level)**: currently set equal to Level 0 (`LEVEL_6 = LEVEL_0`), but includes bookkeeping for visitation counts.
+### Updated level overview (0–6)
+
+The code defines seven distinct levels in `LEVELS`.
+
+- **Level 0 (basic shortest path)**: empty grid with a single apple near the bottom-right (last row contains `"........A."`).
+- **Level 1 (maze-like rocks + fire strip)**: denser rock layout than before plus a fire band near the bottom, with an apple at the goal region. A backup layout exists as `LEVEL_1_BACKUP`.
+- **Level 2 (multi-apple + key + chest)**: multiple apples, one key, and one chest; includes rock patterns creating corridors.
+- **Level 3 (harder key/chest variant)**: custom layout with repeated wall blocks (`RR.RR.RR.` style), with key, apples, and a chest.
+- **Level 4 (monsters introduced)**: two monsters placed in open space; one apple goal.
+- **Level 5 (monsters + rocks)**: multiple monsters embedded inside a more constrained rock pattern; one apple goal.
+- **Level 6 (exploration / intrinsic-reward setting)**: alternating rock rows create repeated barriers; one apple goal. This level is designed to illustrate exploration effects when intrinsic reward is enabled.
 
 ## II. Observation Design
 
-### What the agent receives (state)
+### State returned to the agent
 
-The environment exposes state via `GridWorld.get_state()`.
+The agent receives a **tabular** state (hashable Python tuples) via `GridWorld.get_state()`.
 
-A key design decision is that the state representation *changes by level index*:
+A key code change is that the state is now **constructed from components depending on which entities exist in the level**, rather than always returning a fixed schema.
 
-1. **Levels 0–1: minimal state**
+#### Case A: simple levels (0–1 without monsters)
 
-For level indices `<= 1`, the state is just the agent position:
+If `level_idx <= 1` and there are no monsters, the state is just the agent position:
 
 - `state = (agent_row, agent_col)`
 
-This creates a small, fixed state space of up to 100 states; ideal for demonstrating shortest-path style learning with tabular methods.
+This yields at most 100 states, which is ideal for demonstrating shortest-path learning with a small Q-table.
 
-2. **Levels >= 2: extended state with objectives**
+#### Case B: levels with objectives and/or monsters
 
-For more complex levels, the state includes both position and progress flags:
+For more complex levels, the state is a tuple of components:
 
-- `state = ( (agent_row, agent_col), has_key, collected_apples, opened_chests )`
+1. Agent position: `(agent_row, agent_col)`
+2. `has_key` (only if keys exist or a key has been collected)
+3. Remaining apples: `tuple(sorted(apples not yet collected))`
+4. Remaining chests: `tuple(sorted(chests not yet opened))`
+5. Monster positions (if monsters exist): `tuple(sorted(monster_positions))`
 
-Where:
+So conceptually:
 
-- `has_key` is a boolean
-- `collected_apples` is a sorted tuple of apple coordinates visited/collected
-- `opened_chests` is a sorted tuple of chest coordinates opened
+- `state = (agent_pos, [has_key], remaining_apples, remaining_chests, [monster_positions])`
 
-This design makes the state **Markov** with respect to the environment’s objectives (i.e., whether rewards remain available and whether the episode can terminate).
+### Design rationale
 
-### Tabular compatibility and state-space growth
+- **Markov property**: remaining-apples/remaining-chests + key status make it possible to infer what rewards remain available and whether the episode can terminate.
+- **Compactness vs. expressiveness trade-off**:
+  - Tracking *remaining* items (rather than collected items) keeps the representation aligned with “what is left to do”.
+  - Including monsters in the state allows the agent to condition behavior on monster proximity, but can increase state space significantly.
 
-The Q-learning/SARSA agents are tabular (`q_table: Dict[state, np.ndarray]` in `gridworld/agent.py`).
+### Implications for tabular learning
 
-- With `(r,c)` only, tabular learning is compact.
-- Adding item progress makes learning tractable only if the number of items is small.
-  - The code attempts to control this by encoding objective progress as tuples of coordinates, which is general but can grow combinatorially if many items were added.
+The agents in `gridworld/agent.py` implement tabular Q-learning and SARSA using a Python dict `q_table[state] -> np.ndarray(|A|)`.
 
-### Observation vs. rendering
-
-The renderer (`gridworld/renderer.py`) visualizes the full grid (agent, rocks, hazards, items, monsters), but the observation passed to the agent is only the `get_state()` representation above.
-
-This is a key separation:
-
-- **Renderer**: for human understanding/debugging.
-- **Agent state**: minimal information necessary for tabular learning.
+- Levels 0–1: very compact and stable.
+- Levels 2–3: state space grows with the power set of collectibles (apples/chests), but remains manageable because the layouts contain only a few items.
+- Levels 4–5: state space can grow substantially due to monster positions (even though movement is stochastic).
 
 ## III. Reward Design
 
-Rewards are defined in `gridworld/config.py`.
+Rewards are defined in `gridworld/config.py` and applied in `GridWorld.step()`.
 
-### Extrinsic rewards
+### Extrinsic reward components
 
-Each step returns a scalar reward, accumulated as:
+- **Step penalty**: `REWARD_STEP = -0.01` (applied every step, encouraging shorter solutions)
+- **Apple**: `REWARD_APPLE = +1.0` when collected first time
+- **Chest**: `REWARD_CHEST = +2.0` when opened (requires `has_key=True`)
+- **Death**: `REWARD_DEATH = -10.0` on fire/monster collision, terminates immediately
+- **Win bonus**: `REWARD_WIN = +10.0` added when all objectives are complete
 
-- **Step penalty**: `REWARD_STEP = -0.01`
-  - Encourages shorter paths and prevents wandering.
-- **Apple reward**: `REWARD_APPLE = +1.0`
-  - Awarded once per apple when first collected.
-- **Chest reward**: `REWARD_CHEST = +2.0`
-  - Awarded once per chest when opened (requires key).
-- **Death penalty**: `REWARD_DEATH = -10.0`
-  - Applied when stepping into fire or colliding with a monster.
-- **Win bonus**: `REWARD_WIN = +10.0`
-  - Applied when all objectives are completed.
+Typical non-terminal transition reward:
 
-Total reward per transition is typically:
+- `reward = REWARD_STEP + [optional apple/chest] + [optional intrinsic]`
 
-- `reward = REWARD_STEP + (optional item reward) + (optional win bonus)`
+Terminal win transition reward:
 
-Note: death returns immediately with `REWARD_DEATH` (not also adding `REWARD_STEP`).
+- `reward = REWARD_STEP + [optional apple/chest] + REWARD_WIN + [optional intrinsic]`
 
-### Key mechanics and reward shaping
+Terminal death transition reward:
 
-When the agent picks up a key (`K`), the environment sets `has_key = True` but **does not provide a reward** (comment indicates the intended behavior: “no reward but allow opening chests”).
+- `reward = REWARD_DEATH` (returns immediately; no step penalty or intrinsic term is added on that transition).
 
-This is a deliberate shaping choice:
+### Key reward shaping
 
-- It avoids giving reward for an intermediate subgoal unless the task explicitly wants it.
-- It makes the key’s value purely instrumental (it unlocks access to chest reward).
+Picking up the key grants **no direct reward**; it only changes `has_key` so that chests can be opened later. This keeps the reward signal focused on task completion rather than intermediate milestones.
 
-### Intrinsic reward (planned / partial)
+### Intrinsic reward (now implemented)
 
-The environment maintains `visit_counts` for “intrinsic reward (Level 6)” and increments it at every step using the agent’s `(r,c)` position.
+The code now supports optional intrinsic reward via:
 
-However, in the current `step()` implementation, **no intrinsic bonus is actually added to `reward`**. In other words:
+- `GridWorld(..., use_intrinsic_reward=...)`
+- In `step()`, when enabled: `intrinsic_reward = 1 / sqrt(N(s))`, where `N(s)` is the visit count of the agent’s current position.
 
-- `visit_counts` is recorded,
-- but it is not used to shape reward.
+The intrinsic term is **added on top of the environment step reward**:
 
-If intrinsic exploration is desired for Level 6, a common approach would be something like:
+- `reward = REWARD_STEP + intrinsic_reward + (optional extrinsic events)`
 
-- `reward += beta / sqrt(visit_counts[state])` (count-based exploration)
-
-…but as written, Level 6 behaves like Level 0 in terms of reward.
+This design encourages exploration by making novel states more rewarding early in training.
 
 ## IV. Hyperparameter Exploration
 
-Training is driven by `gridworld/main.py`, which supports Q-learning and SARSA with the following hyperparameters from `gridworld/config.py`:
+### Training entry point and new training controls
 
-- `ALPHA = 0.1` (learning rate)
-- `GAMMA = 0.99` (discount)
-- Epsilon-greedy schedule:
-  - `EPSILON_START = 1.0`
-  - `EPSILON_END = 0.01`
-  - `EPSILON_DECAY = 0.995` (multiplicative decay per episode)
+Training is driven by `gridworld/main.py` (not `gridworld/train.py`, which is now an experiment launcher).
 
-The repository currently does not include a dedicated sweep runner (and `gridworld/train.py` is a placeholder), but the components are suitable for systematic exploration.
+Important new training-related controls in `gridworld/main.py`:
 
-### Recommended exploration methodology
+- `--max_steps`: caps episode length (default 100)
+- `--intrinsic`: enables intrinsic reward shaping
+- `--save_model`, `--load_model`: save/load Q-tables (pickled) under `gridworld/models/`
+- `--test`: disables learning (`alpha=0`) and exploration (`epsilon=0`) for evaluation
+- `--checkpoint_interval`: periodic checkpoint saves when `--save_model` is used
+- Optional TensorBoard logging if `torch.utils.tensorboard` is available:
+  - `rollout/ep_rew_mean`, `train/epsilon`, `rollout/ep_len_mean`
 
-A practical sweep plan for this codebase:
+### Algorithmic hyperparameters (tabular RL)
 
-1. Choose a representative set of levels
-   - **Level 0/1**: shortest-path + obstacles + fire
-   - **Level 2**: sparse reward with key→chest dependency
-   - **Level 4**: stochastic dynamics due to monster movement
+`gridworld/config.py` defines base defaults:
 
-2. Evaluate both algorithms under controlled settings
-   - Compare Q-learning vs SARSA in stochastic levels (Level 4), where SARSA’s on-policy nature can be more conservative.
+- `ALPHA = 0.1`
+- `GAMMA = 0.99`
+- `EPSILON_START = 1.0`
+- `EPSILON_END = 0.01`
 
-3. Track metrics
-   - Average return over last N episodes (e.g., N=50)
-   - Success rate (fraction of episodes ending with win)
-   - Steps-to-complete for successful episodes
+#### Key change: epsilon decay schedule is now linear
 
-### Hyperparameters to vary (and expected effects)
+In `gridworld/main.py`, epsilon decay is computed as:
 
-#### Learning rate (`ALPHA`)
-Suggested values: `{0.05, 0.1, 0.2, 0.5}`
+- `linear_decay = (EPSILON_START - EPSILON_END) / episodes`
 
-- Too low: slow learning, especially in sparse reward levels.
-- Too high: unstable Q-values and oscillation, worse with stochastic monsters.
+And `BaseAgent.decay_epsilon()` updates epsilon via:
 
-#### Discount factor (`GAMMA`)
-Suggested values: `{0.90, 0.95, 0.99}`
+- `epsilon = max(epsilon_end, epsilon - epsilon_decay)`
 
-- Lower gamma can prioritize immediate apple reward and avoid long planning.
-- Higher gamma helps planning for key→chest dependencies (Level 2).
+So `epsilon_decay` is acting as a **per-episode linear decrement**, not a multiplicative factor.
 
-#### Exploration schedule (`EPSILON_*`)
-Suggested exploration knobs:
+### What to explore (recommended sweeps)
 
-- `EPSILON_DECAY` in `{0.99, 0.995, 0.999}`
-- `EPSILON_END` in `{0.01, 0.05, 0.1}`
+Even without changing code, you can explore the following axes (by editing `gridworld/config.py` and rerunning):
 
-Expected behavior:
+- **Learning rate (`ALPHA`)**: e.g., `{0.05, 0.1, 0.2, 0.5}`
+  - Higher can learn faster but can destabilize in stochastic monster levels.
+- **Discount (`GAMMA`)**: e.g., `{0.90, 0.95, 0.99}`
+  - Higher helps long-horizon goals (key→chest + multi-apple collection).
+- **Episode budget (`--episodes`)**: trade off convergence vs. runtime.
+- **Episode cap (`--max_steps`)**: affects exploration pressure and return scale.
+- **Intrinsic reward (`--intrinsic`)**:
+  - Compare Level 6 baseline vs intrinsic shaping to quantify exploration benefits.
 
-- Faster decay can work on simple maps (Level 0), but risks premature convergence on harder maps.
-- Higher ε_end can help in non-stationary/stochastic settings (Level 4 monsters) but may reduce asymptotic performance.
+### Experiment orchestration (`gridworld/train.py`)
 
-### Notes about implementation constraints
+`gridworld/train.py` now contains a list of long-running experiment commands (multi-threaded runner) that execute `python3 main.py ...` across tasks/levels and track status in the terminal.
 
-- The agent uses a Python dict Q-table keyed by the state tuple; this makes sweeps easy, but memory can grow if the state is large (Levels ≥ 2).
-- Because episodes end on death, hazards can dominate returns; for stable comparisons, report both return and win-rate.
+It encodes a curriculum-like set of runs, including:
+
+- Level 0/1 (Q-learning)
+- Level 1 (SARSA)
+- Level 2/3 (Q-learning/SARSA)
+- Level 4/5 (Q-learning/SARSA)
+- Level 6 (Q-learning with and without `--intrinsic`)
+
+### Suggested reporting metrics
+
+For consistent hyperparameter comparison, track:
+
+- Mean return over a sliding window (e.g., last 50 episodes)
+- Win rate (% episodes terminating in win)
+- Mean episode length
+- Best-model moving average (the code uses an average over the last 10 episodes to decide model saving)
 
 ---
 
-**Files referenced**: `gridworld/environment.py`, `gridworld/config.py`, `gridworld/agent.py`, `gridworld/main.py`, `gridworld/renderer.py`.
+**Files referenced**: `gridworld/environment.py`, `gridworld/config.py`, `gridworld/agent.py`, `gridworld/main.py`, `gridworld/train.py`.

@@ -16,27 +16,27 @@ BLUE = "\033[34m"
 commands = [
     (
         "Task 1: Level 0 Q-Learning",
-        "python3 main.py --level 0 --algo q_learning --episodes 10000000 --no_render --save_model q_level0.pkl",
+        "python3 main.py --level 0 --algo q_learning --episodes 100000 --no_render --save_model q_level0.pkl",
     ),
-	(
+    (
         "Task 2: Level 1 Q-Learning",
-        "python3 main.py --level 1 --algo q_learning --episodes 10000000 --no_render --save_model q_level1.pkl",
+        "python3 main.py --level 1 --algo q_learning --episodes 1000000 --no_render --save_model q_level1.pkl",
     ),
     (
         "Task 2: Level 1 SARSA",
-        "python3 main.py --level 1 --algo sarsa --episodes 10000000 --no_render --save_model sarsa_level1.pkl",
+        "python3 main.py --level 1 --algo sarsa --episodes 1000000 --no_render --save_model sarsa_level1.pkl",
     ),
     (
         "Task 3: Level 2 Q-Learning",
-        "python3 main.py --level 2 --algo q_learning --episodes 10000000 --no_render --save_model q_level2.pkl",
+        "python3 main.py --level 2 --algo q_learning --episodes 4000000 --no_render --save_model q_level2.pkl",
     ),
     (
         "Task 3: Level 3 SARSA",
-        "python3 main.py --level 3 --algo sarsa --episodes 10000000 --no_render --save_model sarsa_level3.pkl",
+        "python3 main.py --level 3 --algo sarsa --episodes 4000000 --no_render --save_model sarsa_level3.pkl",
     ),
     (
         "Task 3: Level 3 Q-Learning",
-        "python3 main.py --level 3 --algo q_learning --episodes 10000000 --no_render --save_model q_level3.pkl",
+        "python3 main.py --level 3 --algo q_learning --episodes 4000000 --no_render --save_model q_level3.pkl",
     ),
     (
         "Task 4: Level 4 Q-Learning",
@@ -59,6 +59,7 @@ commands = [
         "python3 main.py --level 6 --algo q_learning --episodes 10000000 --no_render --save_model q_level6_baseline.pkl",
     ),
 ]
+
 
 # Track status: 'PENDING', 'RUNNING', 'DONE', 'ERROR'
 task_status = {name: "PENDING" for name, _ in commands}
