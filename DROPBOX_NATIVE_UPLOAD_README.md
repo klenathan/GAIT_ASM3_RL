@@ -3,7 +3,9 @@
 This repo includes a Dropbox uploader that does **not** use `rclone`.
 
 - Tool: `tools/gw_dropbox_upload.py`
-- Upload method: zip the run directory, then upload the zip via Dropbox API
+- Upload method:
+  - file upload (direct), or
+  - directory upload (zip by default, or upload tree with `--no-zip`)
 - Auth: long-lived access token (simplest)
 
 ## 0) One-time: create a Dropbox access token (on your host machine)
@@ -61,15 +63,36 @@ school machine just run:
 uv sync
 ```
 
-## 3) Upload a single run folder
+## 3) Upload examples
 
-Example uploads `runs/gridworld/<run_name>` to Dropbox folder `/asm3/runs/gridworld`
+### Upload a single run folder (directory → zip)
+
+Uploads `runs/gridworld/<run_name>` to Dropbox folder `/asm3/runs/gridworld`
 (as a zip file named `<run_name>.zip`).
 
 ```
 uv run python tools/gw_dropbox_upload.py \
   --run runs/gridworld/<run_name> \
   --dest "/asm3/runs/gridworld"
+```
+
+### Upload an arbitrary file
+
+This uploads the file to a Dropbox *folder*; the remote file name is the same as the local name.
+
+```
+uv run python tools/gw_dropbox_upload.py \
+  --src path/to/file.ext \
+  --dest "/asm3/files"
+```
+
+### Upload a directory without zipping (directory tree)
+
+```
+uv run python tools/gw_dropbox_upload.py \
+  --src runs/gridworld/<run_name> \
+  --dest "/asm3/runs/gridworld/<run_name>" \
+  --no-zip
 ```
 
 ### Dry run

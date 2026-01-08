@@ -194,7 +194,12 @@ def _zip_directory(source_dir: Path, zip_path: Path) -> None:
 def _dropbox_upload_file(
     *, source_file: Path, token: str, dest_path: str, overwrite: bool
 ) -> None:
-    import dropbox  # imported lazily so --help works even before deps
+    try:
+        import dropbox  # imported lazily so --help works even before deps
+    except ModuleNotFoundError as e:
+        raise ModuleNotFoundError(
+            "Dropbox SDK not installed. Run `uv sync` (or install the 'dropbox' package)."
+        ) from e
 
     dbx = dropbox.Dropbox(token)
 
@@ -217,7 +222,12 @@ def _dropbox_upload_directory_tree(
     dest_dir: str,
     overwrite: bool,
 ) -> None:
-    import dropbox
+    try:
+        import dropbox  # imported lazily so --help works even before deps
+    except ModuleNotFoundError as e:
+        raise ModuleNotFoundError(
+            "Dropbox SDK not installed. Run `uv sync` (or install the 'dropbox' package)."
+        ) from e
 
     dbx = dropbox.Dropbox(token)
     mode = (
