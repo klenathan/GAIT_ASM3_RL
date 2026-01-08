@@ -1,10 +1,9 @@
-try:
-    import pygame
-except ImportError:
-    pygame = None
+import warnings
+# Suppress pkg_resources deprecation warning from pygame
+warnings.filterwarnings("ignore", message=".*pkg_resources is deprecated.*", category=UserWarning)
 
-from config import *
-
+import pygame
+from gridworld.config import *
 
 class Renderer:
     def __init__(self, title="Gridworld RL"):

@@ -20,10 +20,11 @@ env/
 dist/
 build/
 *.egg-info/
+models/**/*.zip
 models/*.zip
+models/**/*.log
+models/**/*.json
+models/**/*.pkl
 logs/*
-*.pkl
-*.png
-gridworld/models/level4_q.pkl
-*.pkl
-/gridworld/runs
+
+runs/
