@@ -16,7 +16,7 @@ This repo includes a tiny uploader wrapper around `rclone`:
   - a browser (to login to Proton)
   - `rclone` installed (recommended)
 
-## 1) Create the Proton Drive remote on your personal machine
+## 1) Auth: easiest option (copy config from your personal machine)
 
 On your personal machine (NOT the school machine):
 
@@ -44,6 +44,33 @@ This should list folders in your Proton Drive.
 
 `rclone` stores remotes in a config file. You can create it on your personal
 machine (with browser auth) and then copy it to the school machine.
+
+## 2b) Auth alternative: `rclone authorize` token paste (Dropbox-style)
+
+Some backends support a copy/paste token flow. The exact prompts vary by
+backend, but the general idea is:
+
+1) On your host/personal machine (with a browser), run:
+
+```
+rclone authorize "<backend>"
+```
+
+2) Copy the **entire** JSON token block it prints.
+
+3) On the school machine, run:
+
+```
+rclone config
+```
+
+- `n` (New remote)
+- choose the backend
+- when it asks for a token / config JSON / access token, paste the JSON block
+  you copied (usually you paste into a prompt like `config_token>`).
+
+For Dropbox specifically, see `DROPBOX_UPLOAD_README.md` below for exact
+prompts and where to paste the token.
 
 ### 2.1 Find your rclone config file path (personal machine)
 
