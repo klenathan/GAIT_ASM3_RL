@@ -19,21 +19,21 @@ Usage:
     python -m arena.eval_headless --model model.zip --episodes 1000 --output results.json
 """
 
+# Suppress warnings BEFORE any imports to prevent pkg_resources deprecation warning from pygame
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
 import argparse
 import json
 import os
 import glob
 import time
-import warnings
 from typing import Dict, List, Optional, Tuple, Any
 from pathlib import Path
 from dataclasses import dataclass, asdict
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np
-
-# Suppress warnings
-warnings.filterwarnings("ignore", category=UserWarning)
-warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 from arena.training.registry import AlgorithmRegistry
 from arena.training.algorithms import dqn, ppo, ppo_lstm, ppo_dict, a2c  # noqa: F401 - Import to register algorithms
@@ -127,6 +127,17 @@ class HeadlessEvaluator:
             if algo in name:
                 return algo
         return "ppo"
+    
+    def _infer_style(self, model_path: str) -> int:
+        """Infer control style from model path."""
+        path_lower = model_path.lower()
+        if 'style2' in path_lower:
+            return 2
+        elif 'style1' in path_lower:
+            return 1
+        else:
+            # Default to style 1 if not found in path
+            return 1
     
     def _find_vecnormalize_stats(self, model_path: str) -> Optional[str]:
         """Find VecNormalize stats file matching the model."""
@@ -766,6 +777,70 @@ def save_results(evaluations: List[ModelEvaluation], output_path: str):
     print(f"[OK] Results saved to: {output_path}")
 
 
+def save_results_csv(evaluations: List[ModelEvaluation], output_path: str):
+    """Save evaluation results to CSV file in a structured format.
+    
+    The CSV has models as rows and metrics as columns (transposed format).
+    """
+    import csv
+    
+    # Define the metrics to export (in order)
+    metrics = [
+        ('Algorithm', lambda e: e.algorithm.upper()),
+        ('Style', lambda e: str(e.style)),
+        ('Deterministic', lambda e: str(e.deterministic)),
+        ('Episodes', lambda e: str(e.total_episodes)),
+        ('Eval Time (s)', lambda e: f"{e.eval_time_seconds:.2f}"),
+        ('Speed (eps/sec)', lambda e: f"{e.total_episodes / e.eval_time_seconds:.1f}"),
+        ('Win Rate (%)', lambda e: f"{e.win_rate * 100:.1f}"),
+        ('Avg Win Step', lambda e: f"{int(e.mean_win_step)}" if e.mean_win_step > 0 else "N/A"),
+        ('Mean Reward', lambda e: f"{e.mean_reward:.2f} ± {e.std_reward:.2f}"),
+        ('Median Reward', lambda e: f"{e.median_reward:.2f}"),
+        ('Reward Min', lambda e: f"{e.min_reward:.2f}"),
+        ('Reward Max', lambda e: f"{e.max_reward:.2f}"),
+        ('Mean Episode Length', lambda e: f"{int(e.mean_length)} ± {int(e.std_length)}"),
+        ('Median Episode Length', lambda e: f"{int(e.median_length)}"),
+        ('Episode Length Min', lambda e: str(e.min_length)),
+        ('Episode Length Max', lambda e: str(e.max_length)),
+        ('Spawners / Episode', lambda e: f"{e.mean_spawners_destroyed:.2f} ± {e.std_spawners_destroyed:.2f}"),
+        ('Enemies / Episode', lambda e: f"{e.mean_enemies_destroyed:.1f}"),
+        ('Avg Phase Reached', lambda e: f"{e.mean_phase_reached:.2f}"),
+        ('Avg Final HP', lambda e: f"{int(e.mean_final_health)}"),
+        ('First Spawner Kill (steps)', lambda e: f"{int(e.mean_first_spawner_kill)}" if e.mean_first_spawner_kill > 0 else "N/A"),
+    ]
+    
+    # Add phase distribution metrics
+    max_phase = max(max(e.phase_distribution.keys()) for e in evaluations) if evaluations else 0
+    for phase in range(1, max_phase + 1):
+        metrics.append((
+            f'Phase {phase} (%)',
+            lambda e, p=phase: f"{e.phase_distribution.get(p, 0) / e.total_episodes * 100:.1f}"
+        ))
+    
+    # Add spawner kill distribution metrics
+    max_spawners = max(max(e.spawner_kill_distribution.keys()) for e in evaluations) if evaluations else 0
+    for kills in range(max_spawners + 1):
+        if any(e.spawner_kill_distribution.get(kills, 0) > 0 for e in evaluations):
+            metrics.append((
+                f'{kills} Spawners Killed (%)',
+                lambda e, k=kills: f"{e.spawner_kill_distribution.get(k, 0) / e.total_episodes * 100:.1f}"
+            ))
+    
+    with open(output_path, 'w', newline='') as f:
+        writer = csv.writer(f)
+        
+        # Write header row with metric names (transposed: models as rows, metrics as columns)
+        header = ['Model'] + [metric_name for metric_name, _ in metrics]
+        writer.writerow(header)
+        
+        # Write each model as a row
+        for ev in evaluations:
+            row = [ev.model_name] + [metric_fn(ev) for _, metric_fn in metrics]
+            writer.writerow(row)
+    
+    print(f"[OK] CSV results saved to: {output_path}")
+
+
 def find_models_in_directory(directory: str, pattern: str = "*.zip") -> List[str]:
     """Recursively find model files in directory."""
     path = Path(directory)
@@ -788,12 +863,13 @@ def main():
     
     # Evaluation parameters
     parser.add_argument('--episodes', type=int, default=100, help='Number of episodes per model (default: 100)')
-    parser.add_argument('--style', type=int, default=1, choices=[1, 2], help='Control style (default: 1)')
+    parser.add_argument('--style', type=int, default=None, choices=[1, 2], help='Control style (auto-detected from model path if not specified)')
     parser.add_argument('--stochastic', action='store_true', help='Use stochastic policy (default: deterministic)')
     parser.add_argument('--algo', type=str, default=None, help='Algorithm type (auto-detected if not specified)')
     
     # Output options
     parser.add_argument('--output', type=str, default=None, help='Output JSON file path')
+    parser.add_argument('--csv', type=str, default=None, help='Output CSV file path for tabular results')
     parser.add_argument('--save-episodes', action='store_true', help='Save raw episode data in output')
     parser.add_argument('--quiet', action='store_true', help='Suppress progress messages')
     parser.add_argument('--compare', action='store_true', help='Print comparison table for multiple models')
@@ -841,9 +917,16 @@ def main():
     
     for model_path in model_paths:
         try:
+            # Auto-detect style from model path if not specified
+            style = args.style
+            if style is None:
+                style = evaluator._infer_style(model_path)
+                if not args.quiet:
+                    print(f"Auto-detected style: {style} (from model path)")
+            
             eval_result = evaluator.evaluate_model(
                 model_path=model_path,
-                style=args.style,
+                style=style,
                 num_episodes=args.episodes,
                 deterministic=not args.stochastic,
                 algo=args.algo,
@@ -871,6 +954,10 @@ def main():
     # Save results if requested
     if args.output:
         save_results(evaluations, args.output)
+    
+    # Save CSV results if requested
+    if args.csv:
+        save_results_csv(evaluations, args.csv)
     
     print(f"\n[OK] Evaluation complete! Evaluated {len(evaluations)} model(s) with {args.episodes} episodes each.")
 

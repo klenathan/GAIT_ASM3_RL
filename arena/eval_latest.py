@@ -64,6 +64,8 @@ def main():
                        help='Use stochastic policy')
     parser.add_argument('--output', type=str, default=None,
                        help='Output JSON file')
+    parser.add_argument('--csv', type=str, default=None,
+                       help='Output CSV file for tabular results')
     parser.add_argument('--final-only', action='store_true',
                        help='Only search in final/ directories')
     parser.add_argument('--checkpoint-only', action='store_true',
@@ -134,6 +136,9 @@ def main():
         
         if args.output:
             cmd.extend(['--output', args.output])
+        
+        if args.csv:
+            cmd.extend(['--csv', args.csv])
         
         # Pass curriculum options
         if args.curriculum_stage is not None:
