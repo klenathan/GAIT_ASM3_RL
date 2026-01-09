@@ -3,24 +3,22 @@ Deep RL Arena - Dict Observation Environment.
 Variant of ArenaEnv that uses dictionary observation space for better feature grouping.
 """
 
+from arena.ui.renderer import ArenaRenderer
+from arena.game.entities import Player, Enemy, Spawner, Projectile
+from arena.game import utils
+from arena.core.curriculum import CurriculumManager, CurriculumStage
+from arena.core import config
+import pygame
+import math
+import numpy as np
+from gymnasium import spaces
+import gymnasium as gym
 import warnings
 
 # Suppress pkg_resources deprecation warning from pygame
 warnings.filterwarnings(
     "ignore", message=".*pkg_resources is deprecated.*", category=UserWarning
 )
-
-import gymnasium as gym
-from gymnasium import spaces
-import numpy as np
-import math
-import pygame
-
-from arena.core import config
-from arena.core.curriculum import CurriculumManager, CurriculumStage
-from arena.game import utils
-from arena.game.entities import Player, Enemy, Spawner, Projectile
-from arena.ui.renderer import ArenaRenderer
 
 
 class ArenaDictEnv(gym.Env):
@@ -39,7 +37,8 @@ class ArenaDictEnv(gym.Env):
     - Style 2: Directional Movement (6 actions)
     """
 
-    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": config.FPS}
+    metadata = {"render_modes": [
+        "human", "rgb_array"], "render_fps": config.FPS}
 
     def __init__(
         self,
@@ -197,7 +196,8 @@ class ArenaDictEnv(gym.Env):
         max_enemies = config.SPAWNER_MAX_ENEMIES
         enemy_speed = phase_cfg["enemy_speed_mult"]
         if self.curriculum_stage:
-            max_enemies = int(max_enemies * self.curriculum_stage.max_enemies_mult)
+            max_enemies = int(
+                max_enemies * self.curriculum_stage.max_enemies_mult)
             enemy_speed *= self.curriculum_stage.enemy_speed_mult
 
         # Update spawners
@@ -283,6 +283,10 @@ class ArenaDictEnv(gym.Env):
         """Initialize a new phase with spawners."""
         phase_cfg = config.PHASE_CONFIG[self.current_phase]
         num = phase_cfg["spawners"]
+        # Apply curriculum spawner multiplier (controls number of simultaneous spawners)
+        if self.curriculum_stage:
+            num = max(
+                1, int(round(num * self.curriculum_stage.spawner_multiplier)))
         self.enemies = []
 
         for i in range(num):
@@ -308,7 +312,8 @@ class ArenaDictEnv(gym.Env):
     def _get_spawner_position_smart(self, spawner_index, total_spawners):
         """Generate random spawner position with minimum distance from player spawn."""
         margin = 100  # Minimum distance from arena edges
-        min_dist_from_player = 250  # Minimum distance from player spawn (center-bottom)
+        # Minimum distance from player spawn (center-bottom)
+        min_dist_from_player = 250
         min_dist_between_spawners = 150  # Minimum distance between spawners
 
         w, h = config.GAME_WIDTH, config.GAME_HEIGHT
@@ -329,7 +334,8 @@ class ArenaDictEnv(gym.Env):
             # Check distance from existing spawners
             too_close = False
             for spawner in self.spawners:
-                dist = math.sqrt((x - spawner.pos[0]) ** 2 + (y - spawner.pos[1]) ** 2)
+                dist = math.sqrt(
+                    (x - spawner.pos[0]) ** 2 + (y - spawner.pos[1]) ** 2)
                 if dist < min_dist_between_spawners:
                     too_close = True
                     break
@@ -376,7 +382,8 @@ class ArenaDictEnv(gym.Env):
         for i, enemy in enumerate(nearest_enemies):
             base_idx = i * 3
             if enemy:
-                combat[base_idx] = utils.distance(self.player.pos, enemy.pos) / max_dist
+                combat[base_idx] = utils.distance(
+                    self.player.pos, enemy.pos) / max_dist
                 combat[base_idx + 1] = utils.normalize_angle(
                     utils.relative_angle(
                         self.player.rotation,
@@ -408,7 +415,7 @@ class ArenaDictEnv(gym.Env):
                 combat[base_idx + 2] = 1.0
                 combat[base_idx + 3] = spawner.health / spawner.max_health
             else:
-                combat[base_idx : base_idx + 4] = [1.0, 0.5, 0.0, 0.0]
+                combat[base_idx: base_idx + 4] = [1.0, 0.5, 0.0, 0.0]
 
         # Nearest 5 projectiles (dist, angle, exists) x5 = 15 dims at indices 14-28
         nearest_projectiles = self._get_nearest_projectiles(k=5)
@@ -419,7 +426,7 @@ class ArenaDictEnv(gym.Env):
                 combat[base_idx + 1] = proj_info["angle"]
                 combat[base_idx + 2] = 1.0
             else:
-                combat[base_idx : base_idx + 3] = [1.0, 0.5, 0.0]
+                combat[base_idx: base_idx + 3] = [1.0, 0.5, 0.0]
 
         # --- Mission Progress (3 dims) ---
         mission = np.zeros(3, dtype=np.float32)
@@ -428,19 +435,27 @@ class ArenaDictEnv(gym.Env):
         # Spawners remaining ratio
         phase_idx = min(self.current_phase, config.MAX_PHASES - 1)
         initial_spawners = config.PHASE_CONFIG[phase_idx]["spawners"]
+        if self.curriculum_stage:
+            initial_spawners = max(
+                1, int(round(initial_spawners *
+                       self.curriculum_stage.spawner_multiplier))
+            )
         mission[1] = len([s for s in self.spawners if s.alive]) / max(
             initial_spawners, 1
         )
 
-        mission[2] = 1.0 - (self.current_step / config.MAX_STEPS)  # time remaining
+        mission[2] = 1.0 - (self.current_step /
+                            config.MAX_STEPS)  # time remaining
 
         # --- Spatial Awareness (4 dims) ---
         spatial = np.zeros(4, dtype=np.float32)
-        spatial[0] = self.player.pos[0] / config.GAME_WIDTH  # distance from left
+        spatial[0] = self.player.pos[0] / \
+            config.GAME_WIDTH  # distance from left
         spatial[1] = 1.0 - (
             self.player.pos[0] / config.GAME_WIDTH
         )  # distance from right
-        spatial[2] = self.player.pos[1] / config.GAME_HEIGHT  # distance from top
+        spatial[2] = self.player.pos[1] / \
+            config.GAME_HEIGHT  # distance from top
         spatial[3] = 1.0 - (
             self.player.pos[1] / config.GAME_HEIGHT
         )  # distance from bottom
@@ -448,7 +463,8 @@ class ArenaDictEnv(gym.Env):
         # --- Enemy Count (1 dim) ---
         enemy_count = np.zeros(1, dtype=np.float32)
         enemy_count[0] = (
-            len([e for e in self.enemies if e.alive]) / config.SPAWNER_MAX_ENEMIES
+            len([e for e in self.enemies if e.alive]) /
+            config.SPAWNER_MAX_ENEMIES
         )
 
         return {
@@ -588,7 +604,8 @@ class ArenaDictEnv(gym.Env):
             self._prev_player_health = self.player.health
             return 0.0
 
-        current_spawner_health = sum(s.health for s in self.spawners if s.alive)
+        current_spawner_health = sum(
+            s.health for s in self.spawners if s.alive)
         spawner_damage = max(
             0, self._prev_spawner_total_health - current_spawner_health
         )
@@ -596,7 +613,8 @@ class ArenaDictEnv(gym.Env):
         offensive_score = spawner_damage + (
             enemy_kills_this_step * config.ENEMY_HEALTH * 0.5
         )
-        player_damage_taken = max(0, self._prev_player_health - self.player.health)
+        player_damage_taken = max(
+            0, self._prev_player_health - self.player.health)
         health_ratio = self.player.get_health_ratio()
         efficiency = (offensive_score * (0.5 + 0.5 * health_ratio)) - (
             player_damage_taken * 0.8

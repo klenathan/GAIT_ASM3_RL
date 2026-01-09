@@ -4,3 +4,4 @@ stable-baselines3[extra]
 numpy
 tensorboard
 tqdm
+seaborn
