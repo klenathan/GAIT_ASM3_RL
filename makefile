@@ -1,12 +1,13 @@
 evaluate:
 	uv run python -m arena.evaluate --device cpu
-	
+
 eval_headless:
 	uv run python -m arena.eval_headless \
-		--model runs/ppo/style1/ppo_style1_20260109_185210/checkpoints/ppo_style1_20260109_185210_11200000_steps.zip \
+		--model runs/ppo/style1/ppo_style1_20260109_204327/checkpoints/ppo_style1_20260109_204327_3200000_steps.zip \
 		--episodes 100 \
 		--device cpu \
-		--workers 10
+		--workers 10 \
+		--stochastic
 
 eval_headless_multiple_s2:
 	uv run python -m arena.eval_headless \
@@ -18,14 +19,16 @@ eval_headless_multiple_s2:
 	runs/ppo_lstm/style2/ppo_lstm_style2_20260109_151613/final/ppo_lstm_style2_20260109_151613_final.zip \
 	--workers 10 \
 	--episodes 100 \
-	--csv comparison_s2.csv
+	--csv comparison_s2.csv \
+	--stochastic
 
 eval_headless_multiple_s1:
 	uv run python -m arena.eval_headless \
 	--models \
 	runs/ppo_lstm/style1/ppo_lstm_style1_20260109_183659/checkpoints/ppo_lstm_style1_20260109_183659_2000000_steps.zip \
 	--workers 10 \
-	--episodes 100 \
+	--episodes 100 \ 
+	--stochastic \
 	--csv comparison_s1.csv
 
 train_ppo_lstm_s1:
