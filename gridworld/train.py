@@ -55,7 +55,7 @@ DEFAULT_COMMANDS = [
     ),
     (
         "Task 6: Level 5 Q-Learning",
-        "python -m gridworld.main --level 5 --algo q_learning --episodes 400000 --no_render  --save_model q_level5.pkl",
+        "python -m gridworld.main --level 5 --algo q_learning --episodes 300000 --no_render  --save_model q_level5.pkl",
     ),
     (
         "Task 7: Level 6 Q-Learning (Intrinsic)",
