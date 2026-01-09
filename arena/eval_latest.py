@@ -75,6 +75,10 @@ def main():
     parser.add_argument('--auto-curriculum', action='store_true',
                        help='Auto-detect curriculum stage from training state file')
     
+    # Performance options
+    parser.add_argument('--workers', type=int, default=1, 
+                       help='Number of parallel environments for faster evaluation (default: 1)')
+    
     args = parser.parse_args()
     
     try:
@@ -137,6 +141,10 @@ def main():
         
         if args.auto_curriculum:
             cmd.append('--auto-curriculum')
+        
+        # Pass workers option for parallel evaluation
+        if args.workers > 1:
+            cmd.extend(['--workers', str(args.workers)])
         
         print(f"\nRunning evaluation with {args.episodes} episodes...")
         print(f"Command: {' '.join(cmd)}\n")
