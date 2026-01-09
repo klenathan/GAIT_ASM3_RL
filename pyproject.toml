@@ -20,6 +20,7 @@ dependencies = [
     "sb3-contrib>=2.7.1",
     "pygame-emojis>=0.2.0",
     "dropbox>=12.0.2",
+    "seaborn>=0.13.2",
 ]
 
 
