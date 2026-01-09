@@ -29,6 +29,10 @@ ACTION_SPACE_STYLE_1 = 5  # Rotation, Thrust, Shoot
 ACTION_SPACE_STYLE_2 = 6  # Directional (4), Shoot
 
 # Observation Space Layout (44 dims total):
+#
+# Note: For control style 2 only, the base vector is extended with 2 extra
+# features appended at the end:
+# [44-45] Nearest spawner relative position (dx, dy)
 # [0-1]   Player position (x, y)
 # [2-3]   Player velocity (vx, vy)
 # [4]     Player rotation
@@ -91,27 +95,28 @@ PLAYER_SHOOT_COOLDOWN = 5
 ENEMY_RADIUS = 12
 ENEMY_HEALTH = 10
 ENEMY_SPEED = 1.0
-ENEMY_DAMAGE = 5
-ENEMY_SHOOT_COOLDOWN = 260
+ENEMY_DAMAGE = 10
+ENEMY_SHOOT_COOLDOWN = 80
 ENEMY_SHOOT_PROBABILITY = 0.3
 
 SPAWNER_RADIUS = 35
 SPAWNER_HEALTH = 100
-SPAWNER_SPAWN_COOLDOWN = 420
-SPAWNER_MAX_ENEMIES = 4
+SPAWNER_SPAWN_COOLDOWN = 260
+SPAWNER_MAX_ENEMIES = 6
 
 PROJECTILE_RADIUS = 3
-PROJECTILE_SPEED = 8.0
-PROJECTILE_DAMAGE = 5
+PROJECTILE_SPEED = 9.0
+PROJECTILE_DAMAGE = 10
 PROJECTILE_LIFETIME = 420
 
 # Phase System
+# big spawn rate mult -> slower spawn rate
 PHASE_CONFIG = [
-    {"spawners": 1, "enemy_speed_mult": 1.0, "spawn_rate_mult": 0.8},
-    {"spawners": 1, "enemy_speed_mult": 0.9, "spawn_rate_mult": 0.9},
-    {"spawners": 1, "enemy_speed_mult": 0.8, "spawn_rate_mult": 0.3},
-    {"spawners": 2, "enemy_speed_mult": 0.6, "spawn_rate_mult": 0.2},
-    {"spawners": 3, "enemy_speed_mult": 0.5, "spawn_rate_mult": 0.1},
+    {"spawners": 1, "enemy_speed_mult": 1.0, "spawn_rate_mult": 0.9},
+    {"spawners": 1, "enemy_speed_mult": 0.9, "spawn_rate_mult": 0.8},
+    {"spawners": 1, "enemy_speed_mult": 0.8, "spawn_rate_mult": 0.7},
+    {"spawners": 2, "enemy_speed_mult": 0.6, "spawn_rate_mult": 0.3},
+    {"spawners": 3, "enemy_speed_mult": 0.5, "spawn_rate_mult": 0.2},
 ]
 MAX_PHASES = len(PHASE_CONFIG)
 
@@ -188,8 +193,23 @@ class Style2Config(ControlStyleConfig):
     - Aligning position so fixed nozzle points at spawners
     """
 
+    # Reward Structure
+    max_steps: int = 3000
+    reward_enemy_destroyed: float = 1
+    reward_spawner_destroyed: float = 10.0
+    reward_phase_complete: float = 0.0
+    reward_damage_taken: float = -1
+    reward_death: float = -50.0
+    reward_step_survival: float = -0.05
+    reward_hit_enemy: float = 1
+    reward_hit_spawner: float = 2
+    reward_shot_fired: float = 0.0
+    reward_quick_spawner_kill: float = 20.0
+
     # Style 2 benefits from stronger shaping to learn positioning for fixed angle
-    shaping_scale: float = 1.2
+    shaping_scale: float = 2.0
+    shaping_clip: float = 2.0
+
     # Standard episode length
     max_steps: int = 3000
     # Less penalty for "inactivity" since style 2 has no momentum
@@ -201,6 +221,9 @@ class Style2Config(ControlStyleConfig):
         0.3  # Bonus when shooting while aimed at spawner center
     )
     aim_cone_degrees: float = 30.0  # Degrees from center for any bonus (0 outside cone)
+
+    # Curriculum Learning - DISABLED to fast-track to Stage 5 (Full Difficulty)
+    curriculum_enabled: bool = False
 
 
 # Factory function to get style-specific config
@@ -288,7 +311,7 @@ class TrainerConfig:
     lr_warmup_fraction: float = 0.0
 
     # DQN specific
-    dqn_hidden_layers: List[int] = field(default_factory=lambda: [256, 128, 64])
+    dqn_hidden_layers: List[int] = field(default_factory=lambda: [256, 128, 128, 64])
     dqn_activation: str = "SiLU"
 
     # PPO specific
@@ -314,16 +337,16 @@ class TrainerConfig:
 @dataclass
 class DQNHyperparams:
     learning_rate: float = 3e-4
-    buffer_size: int = 100_000
-    batch_size: int = 64
+    buffer_size: int = 150_000
+    batch_size: int = 128
     gamma: float = 0.99
-    exploration_fraction: float = 0.5
+    exploration_fraction: float = 0.85
     exploration_initial_eps: float = 1.0
     exploration_final_eps: float = 0.05
     target_update_interval: int = 1000
     train_freq: int = 4
-    gradient_steps: int = 1
-    learning_starts: int = 1000
+    gradient_steps: int = 2
+    learning_starts: int = 2000
     verbose: int = 1
 
 

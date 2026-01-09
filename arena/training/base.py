@@ -65,7 +65,8 @@ class BaseTrainer(ABC):
         self.curriculum_manager: Optional[CurriculumManager] = None
 
         # Initialize curriculum if enabled
-        if arena_config.CURRICULUM_ENABLED:
+        style_cfg = arena_config.get_style_config(config.style)
+        if arena_config.CURRICULUM_ENABLED and style_cfg.curriculum_enabled:
             self.curriculum_manager = CurriculumManager(
                 CurriculumConfig(enabled=True, control_style=config.style)
             )

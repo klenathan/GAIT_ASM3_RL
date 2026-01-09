@@ -53,8 +53,12 @@ class ArenaEnv(gym.Env):
         else:
             self.action_space = spaces.Discrete(config.ACTION_SPACE_STYLE_2)
 
+        obs_dim = config.OBS_DIM
+        if control_style == 2:
+            obs_dim += 2  # Style 2 only: relative (dx, dy) to nearest spawner
+
         self.observation_space = spaces.Box(
-            low=-1.0, high=1.0, shape=(config.OBS_DIM,), dtype=np.float32
+            low=-1.0, high=1.0, shape=(obs_dim,), dtype=np.float32
         )
 
         self.renderer = None
@@ -328,8 +332,13 @@ class ArenaEnv(gym.Env):
         )
 
     def _get_observation(self):
-        """Build expanded observation vector (32 dims) with agent-relative coordinates."""
-        obs = np.zeros(config.OBS_DIM, dtype=np.float32)
+        """Build observation vector.
+
+        Base observation uses `config.OBS_DIM`.
+        Control style 2 appends 2 extra features: (dx, dy) to nearest spawner.
+        """
+        obs_dim = config.OBS_DIM + (2 if self.control_style == 2 else 0)
+        obs = np.zeros(obs_dim, dtype=np.float32)
         max_dist = math.sqrt(config.GAME_WIDTH**2 + config.GAME_HEIGHT**2)
 
         # Arena center
@@ -441,6 +450,18 @@ class ArenaEnv(gym.Env):
 
         # [43] Enemy count
         obs[43] = len([e for e in self.enemies if e.alive]) / config.SPAWNER_MAX_ENEMIES
+
+        # [44-45] (Style 2 only) Relative position to nearest spawner (dx, dy)
+        # if self.control_style == 2:
+        #     nearest_spawner = self._find_k_nearest_entities(self.spawners, k=1)[0]
+        #     if nearest_spawner:
+        #         dx = (nearest_spawner.pos[0] - self.player.pos[0]) / config.GAME_WIDTH
+        #         dy = (nearest_spawner.pos[1] - self.player.pos[1]) / config.GAME_HEIGHT
+        #         obs[44] = np.clip(dx, -1.0, 1.0)
+        #         obs[45] = np.clip(dy, -1.0, 1.0)
+        #     else:
+        #         obs[44] = 0.0
+        #         obs[45] = 0.0
 
         return obs
 
