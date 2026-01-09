@@ -130,7 +130,8 @@ class StageBasedStrategy(AdvancementStrategy):
             for t, w in zip(metrics.episode_lengths[-window:], metrics.wins[-window:])
             if w == 1
         ]
-        avg_win_time = np.mean(recent_win_times) if recent_win_times else 999999
+        avg_win_time = np.mean(
+            recent_win_times) if recent_win_times else 999999
 
         # All criteria must be met
         criteria_met = (
@@ -167,6 +168,9 @@ class CurriculumStage:
     spawn_cooldown_mult: float = 1.0  # Higher = slower spawns
     max_enemies_mult: float = 1.0  # Lower = fewer enemies
     spawner_health_mult: float = 1.0  # Lower = easier to kill
+    # Multiplier applied to the number of spawners for a phase. Useful to
+    # increase the number of simultaneous spawners for multi-spawner training.
+    spawner_multiplier: float = 1.0
     enemy_speed_mult: float = 1.0  # Lower = slower enemies
     shaping_scale_mult: float = 1.0  # Higher = stronger guidance
     damage_penalty_mult: float = 1.0  # Higher = more severe damage penalties
@@ -290,48 +294,11 @@ def get_style1_stages() -> List[CurriculumStage]:
     4. Advanced maneuvering under pressure
     """
     return [
-        # # Grade 1: Survival Basics
-        # # Behavior Focus: Basic movement, staying alive, avoiding damage
-        # # Low enemy count, slow enemies, reduced damage penalties, high shaping guidance
-        # CurriculumStage(
-        #     name="Grade 1: Survival Basics",
-        #     spawn_cooldown_mult=2.5,      # Very slow spawns - less pressure
-        #     max_enemies_mult=0.3,         # Very few enemies - focus on survival
-        #     # Easy spawners (but not the focus yet)
-        #     spawner_health_mult=0.4,
-        #     enemy_speed_mult=0.2,         # Slow enemies - easier to avoid
-        #     shaping_scale_mult=4.0,       # High guidance for basic movement
-        #     damage_penalty_mult=0.3,      # Low damage penalty - encourage exploration
-        #     # Advancement: Must survive consistently
-        #     min_spawner_kill_rate=0.1,    # Spawner kills not required
-        #     min_win_rate=0.0,             # Wins not required
-        #     min_survival_steps=400,       # Must survive ~400 steps consistently
-        #     min_episodes=50,
-        # ),
-        # # Grade 2: Enemy Elimination
-        # # Behavior Focus: Targeting and destroying enemies
-        # # More enemies, moderate speed, emphasis on enemy kills
-        # CurriculumStage(
-        #     name="Grade 2: Enemy Elimination",
-        #     spawn_cooldown_mult=2.0,      # Slower spawns - focus on existing enemies
-        #     max_enemies_mult=0.5,         # More enemies to practice on
-        #     spawner_health_mult=0.5,      # Still easy spawners
-        #     enemy_speed_mult=0.85,        # Moderate speed
-        #     shaping_scale_mult=3.0,       # Good guidance for combat
-        #     damage_penalty_mult=0.6,      # Moderate penalty - learn to fight safely
-        #     # Advancement: Must kill enemies consistently
-        #     min_spawner_kill_rate=0.3,    # Spawners still not focus
-        #     min_win_rate=0.0,             # Wins not required
-        #     min_survival_steps=600,       # Longer survival with combat
-        #     min_enemy_kill_rate=3.0,      # MUST kill at least 3 enemies per episode on average
-        #     min_damage_dealt=50.0,        # Must deal damage to enemies
-        #     min_episodes=75,
-        # ),
-        # Grade 3: Spawner Targeting
+        # Grade 1: Spawner Targeting
         # Behavior Focus: Destroying spawners to progress phases
         # Spawners are primary targets, moderate difficulty
         CurriculumStage(
-            name="Grade 3: Spawner Targeting",
+            name="Grade 1: Spawner Targeting",
             spawn_cooldown_mult=10.0,  # Faster spawns - spawners matter
             max_enemies_mult=0.6,  # More enemies from spawners
             spawner_health_mult=0.65,  # Moderate spawner health
@@ -344,13 +311,14 @@ def get_style1_stages() -> List[CurriculumStage]:
             min_survival_steps=800,  # Good survival while targeting spawners
             min_episodes=120,
         ),
-        # Grade 4: Multi-Target Management
+        # Grade 2: Multi-Target Management
         # Behavior Focus: Handling multiple threats simultaneously
         # More enemies, faster spawns, need to balance priorities
         CurriculumStage(
-            name="Grade 4: Multi-Target Management",
+            name="Grade 2: Multi-Target Management",
             spawn_cooldown_mult=1.4,  # Faster spawns - more pressure
             max_enemies_mult=0.75,  # Many enemies at once
+            spawner_multiplier=1.5,  # More spawners to force multi-target handling
             spawner_health_mult=0.8,  # Harder spawners
             enemy_speed_mult=0.95,  # Fast enemies
             shaping_scale_mult=1.8,  # Less guidance - more independent
@@ -368,13 +336,14 @@ def get_style1_stages() -> List[CurriculumStage]:
             min_damage_dealt=100.0,
             min_episodes=150,
         ),
-        # Grade 5: Aggressive Combat
+        # Grade 3: Aggressive Combat
         # Behavior Focus: Balanced aggression - fast clears while staying alive
         # Emphasis on combat efficiency and win speed
         CurriculumStage(
-            name="Grade 5: Aggressive Combat",
+            name="Grade 3: Aggressive Combat",
             spawn_cooldown_mult=1.1,  # Fast spawns
             max_enemies_mult=0.85,  # Many enemies
+            spawner_multiplier=1.8,  # More spawners - higher multi-target demand
             spawner_health_mult=0.9,  # Strong spawners
             enemy_speed_mult=1.0,  # Full speed
             shaping_scale_mult=1.0,  # Minimal guidance - independent combat
@@ -390,13 +359,14 @@ def get_style1_stages() -> List[CurriculumStage]:
             # max_win_time=1000,            # Fast wins (when winning)
             min_episodes=200,
         ),
-        # Grade 6: Elite Performance
+        # Grade 4: Elite Performance
         # Behavior Focus: Speed, precision, efficiency - win fast and clean
         # Full difficulty, requires aggressive play with excellent execution
         CurriculumStage(
-            name="Grade 6: Elite Performance",
+            name="Grade 4: Elite Performance",
             spawn_cooldown_mult=1.0,  # Full spawn rate
             max_enemies_mult=1.0,  # Maximum enemies
+            spawner_multiplier=2.0,  # Maximize spawner density for elite training
             spawner_health_mult=1.0,  # Full spawner health
             enemy_speed_mult=1.0,  # Full enemy speed
             shaping_scale_mult=0.5,  # Minimal shaping - pure skill
@@ -473,6 +443,7 @@ def get_style2_stages() -> List[CurriculumStage]:
             name="S2-Grade 2: Kiting and Spacing",
             spawn_cooldown_mult=1.0,  # More spawns
             max_enemies_mult=0.65,  # More enemies
+            spawner_multiplier=1.3,  # Slight increase for Style 2 kiting practice
             spawner_health_mult=0.75,  # Tougher spawners
             enemy_speed_mult=0.9,  # Faster enemies
             shaping_scale_mult=1.0,  # Less guidance
@@ -508,6 +479,7 @@ def get_style2_stages() -> List[CurriculumStage]:
             name="S2-Grade 4: Advanced Tactics",
             spawn_cooldown_mult=1.1,  # Near-full spawn rate
             max_enemies_mult=0.9,  # Near-maximum enemies
+            spawner_multiplier=1.5,  # Increase spawners for advanced tactics
             spawner_health_mult=0.95,  # Near-full health
             enemy_speed_mult=1.0,  # Full speed
             shaping_scale_mult=0.8,  # Minimal shaping
@@ -569,7 +541,8 @@ class CurriculumManager:
         self.config = config or CurriculumConfig()
         self.current_stage_index = 0
         self.metrics = CurriculumMetrics()
-        self._advancement_callbacks: List[Callable[[int, CurriculumStage], None]] = []
+        self._advancement_callbacks: List[Callable[[
+            int, CurriculumStage], None]] = []
 
         # Set StageBasedStrategy as default if no strategy is configured
         if self.config.strategy is None:
@@ -644,6 +617,7 @@ class CurriculumManager:
         return {
             "stage_index": self.current_stage_index,
             "stage_name": self.current_stage.name,
+            "spawner_multiplier": getattr(self.current_stage, "spawner_multiplier", 1.0),
             "episodes_recorded": len(self.metrics.spawner_kills),
             "strategy": self.config.strategy.get_name()
             if self.config.strategy

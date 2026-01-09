@@ -3,22 +3,20 @@ CNN Environment for Deep RL Arena.
 Uses multi-channel heatmap observations for CNN-based policies.
 """
 
+from arena.ui.renderer import ArenaRenderer
+from arena.game.entities import Player, Enemy, Spawner, Projectile
+from arena.game import utils
+from arena.core.curriculum import CurriculumManager
+from arena.core import config
+import math
+import numpy as np
+from gymnasium import spaces
+import gymnasium as gym
 import warnings
 
 warnings.filterwarnings(
     "ignore", message=".*pkg_resources is deprecated.*", category=UserWarning
 )
-
-import gymnasium as gym
-from gymnasium import spaces
-import numpy as np
-import math
-
-from arena.core import config
-from arena.core.curriculum import CurriculumManager
-from arena.game import utils
-from arena.game.entities import Player, Enemy, Spawner, Projectile
-from arena.ui.renderer import ArenaRenderer
 
 
 # Heatmap configuration
@@ -55,7 +53,8 @@ class ArenaCNNEnv(gym.Env):
     - Style 2: Directional Movement (6 actions)
     """
 
-    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": config.FPS}
+    metadata = {"render_modes": [
+        "human", "rgb_array"], "render_fps": config.FPS}
 
     def __init__(
         self,
@@ -172,7 +171,8 @@ class ArenaCNNEnv(gym.Env):
 
     def _render_heatmap(self):
         """Generate multi-channel heatmap observation."""
-        heatmap = np.zeros((NUM_CHANNELS, HEATMAP_SIZE, HEATMAP_SIZE), dtype=np.float32)
+        heatmap = np.zeros((NUM_CHANNELS, HEATMAP_SIZE,
+                           HEATMAP_SIZE), dtype=np.float32)
 
         # Channel 0: Player position
         if self.player and self.player.alive:
@@ -219,7 +219,8 @@ class ArenaCNNEnv(gym.Env):
             if proj.alive and not proj.is_player_projectile:
                 if self.player:
                     dist = utils.distance(self.player.pos, proj.pos)
-                    danger = max(0, 1.0 - (dist / config.PROJECTILE_DANGER_RADIUS))
+                    danger = max(
+                        0, 1.0 - (dist / config.PROJECTILE_DANGER_RADIUS))
                 else:
                     danger = 0.5
                 self._add_gaussian_blob(
@@ -256,13 +257,15 @@ class ArenaCNNEnv(gym.Env):
             velocity_magnitude = math.sqrt(
                 self.player.velocity[0] ** 2 + self.player.velocity[1] ** 2
             )
-            scalars[1] = np.clip(velocity_magnitude / config.PLAYER_MAX_VELOCITY, 0, 1)
+            scalars[1] = np.clip(velocity_magnitude /
+                                 config.PLAYER_MAX_VELOCITY, 0, 1)
 
             # [2] Player health ratio
             scalars[2] = self.player.get_health_ratio()
 
             # [3] Shoot cooldown ratio
-            scalars[3] = self.player.shoot_cooldown / config.PLAYER_SHOOT_COOLDOWN
+            scalars[3] = self.player.shoot_cooldown / \
+                config.PLAYER_SHOOT_COOLDOWN
 
             # [4] Phase progress ratio
             scalars[4] = self.current_phase / config.MAX_PHASES
@@ -272,7 +275,8 @@ class ArenaCNNEnv(gym.Env):
 
             # [6] Enemy count (normalized)
             scalars[6] = (
-                len([e for e in self.enemies if e.alive]) / config.SPAWNER_MAX_ENEMIES
+                len([e for e in self.enemies if e.alive]) /
+                config.SPAWNER_MAX_ENEMIES
             )
 
         return scalars
@@ -363,7 +367,8 @@ class ArenaCNNEnv(gym.Env):
         max_enemies = config.SPAWNER_MAX_ENEMIES
         enemy_speed = phase_cfg["enemy_speed_mult"]
         if self.curriculum_stage:
-            max_enemies = int(max_enemies * self.curriculum_stage.max_enemies_mult)
+            max_enemies = int(
+                max_enemies * self.curriculum_stage.max_enemies_mult)
             enemy_speed *= self.curriculum_stage.enemy_speed_mult
 
         # Update spawners
@@ -451,11 +456,15 @@ class ArenaCNNEnv(gym.Env):
         """Initialize a new phase with spawners."""
         phase_cfg = config.PHASE_CONFIG[self.current_phase]
         num = phase_cfg["spawners"]
+        # Apply curriculum spawner multiplier (controls number of simultaneous spawners)
+        if self.curriculum_stage:
+            num = max(
+                1, int(round(num * self.curriculum_stage.spawner_multiplier)))
         self.enemies = []
 
         for i in range(num):
             x, y = self._get_spawner_position_smart(i, num)
-            
+
             # Apply curriculum modifiers
             spawn_rate_mult = phase_cfg["spawn_rate_mult"]
             health_mult = 1.0
@@ -476,36 +485,39 @@ class ArenaCNNEnv(gym.Env):
     def _get_spawner_position_smart(self, spawner_index, total_spawners):
         """Generate random spawner position with minimum distance from player spawn."""
         margin = 100  # Minimum distance from arena edges
-        min_dist_from_player = 250  # Minimum distance from player spawn (center-bottom)
+        # Minimum distance from player spawn (center-bottom)
+        min_dist_from_player = 250
         min_dist_between_spawners = 150  # Minimum distance between spawners
-        
+
         w, h = config.GAME_WIDTH, config.GAME_HEIGHT
         player_spawn = (w / 2, h - 50)  # Player spawns at center-bottom
-        
+
         max_attempts = 100
         for _ in range(max_attempts):
             x = self.np_random.uniform(margin, w - margin)
             y = self.np_random.uniform(margin, h - margin)
-            
+
             # Check distance from player spawn
-            dist_to_player = math.sqrt((x - player_spawn[0])**2 + (y - player_spawn[1])**2)
+            dist_to_player = math.sqrt(
+                (x - player_spawn[0])**2 + (y - player_spawn[1])**2)
             if dist_to_player < min_dist_from_player:
                 continue
-            
+
             # Check distance from existing spawners
             too_close = False
             for spawner in self.spawners:
-                dist = math.sqrt((x - spawner.pos[0])**2 + (y - spawner.pos[1])**2)
+                dist = math.sqrt(
+                    (x - spawner.pos[0])**2 + (y - spawner.pos[1])**2)
                 if dist < min_dist_between_spawners:
                     too_close = True
                     break
-            
+
             if not too_close:
                 return x, y
-        
+
         # Fallback: return random position if no valid spot found
         return self.np_random.uniform(margin, w - margin), self.np_random.uniform(margin, h - margin)
-    
+
     def _handle_collisions(self):
         """Handle all collision detection and return reward."""
         reward = 0.0
@@ -591,7 +603,8 @@ class ArenaCNNEnv(gym.Env):
             self._prev_player_health = self.player.health
             return 0.0
 
-        current_spawner_health = sum(s.health for s in self.spawners if s.alive)
+        current_spawner_health = sum(
+            s.health for s in self.spawners if s.alive)
         spawner_damage = max(
             0, self._prev_spawner_total_health - current_spawner_health
         )
@@ -599,7 +612,8 @@ class ArenaCNNEnv(gym.Env):
         offensive_score = spawner_damage + (
             enemy_kills_this_step * config.ENEMY_HEALTH * 0.5
         )
-        player_damage_taken = max(0, self._prev_player_health - self.player.health)
+        player_damage_taken = max(
+            0, self._prev_player_health - self.player.health)
         health_ratio = self.player.get_health_ratio()
         efficiency = (offensive_score * (0.5 + 0.5 * health_ratio)) - (
             player_damage_taken * 0.8
