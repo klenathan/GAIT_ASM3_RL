@@ -1,9 +1,10 @@
+evaluate:
+	uv run python -m arena.evaluate --device cpu
+	
 eval_headless:
 	uv run python -m arena.eval_headless \
-		--model runs/ppo/style2/ppo_style2_20260109_151548/final/ppo_style2_20260109_151548_final.zip \
+		--model runs/ppo/style1/ppo_style1_20260109_185210/checkpoints/ppo_style1_20260109_185210_11200000_steps.zip \
 		--episodes 100 \
-		--style 2 \
-		--algo ppo \
 		--device cpu \
 		--workers 10
 
@@ -31,4 +32,4 @@ train_ppo_lstm_s1:
 	uv run python -m arena.train --algo ppo_lstm --style 1 --steps 10000000 --no-render --device cpu
 
 train_ppo_ppo_s1:
-	uv run python -m arena.train --algo ppo --style 1 --steps 10000000 --no-render --device cpu
+	uv run python -m arena.train --algo ppo --style 1 --steps 15000000 --no-render --device cpu
