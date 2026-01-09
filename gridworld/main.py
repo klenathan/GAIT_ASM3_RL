@@ -149,6 +149,7 @@ def main():
 
     best_avg_reward = -float("inf")
     last_ckpt_path = None
+    total_timesteps = 0
 
     try:
         current_window_rewards = []
@@ -172,6 +173,7 @@ def main():
             steps = 0
             while not done and steps < args.max_steps:
                 steps += 1
+                total_timesteps += 1
                 if renderer:
                     if not renderer.process_events():
                         return  # Quit
@@ -191,18 +193,17 @@ def main():
                     action = agent.choose_action(next_state)
 
                 if writer and update_info:
-                    global_step = ep * args.max_steps + (steps - 1)
                     if "td_error" in update_info:
                         writer.add_scalar(
                             "train/td_error",
                             abs(update_info["td_error"]),
-                            global_step,
+                            total_timesteps,
                         )
                     if args.algo == "q_learning" and "q_max" in update_info:
                         writer.add_scalar(
                             "train/q_max",
                             update_info["q_max"],
-                            global_step,
+                            total_timesteps,
                         )
                     # Note: Q-learning chooses next action greedily for update logic (inside update),
                     # but effectively for the NEXT step in the environment, we usually re-select based on policy.
@@ -232,7 +233,7 @@ def main():
                 writer.add_scalar("rollout/ep_len_mean", steps, ep)
                 writer.add_scalar("train/epsilon", agent.epsilon, ep)
                 writer.add_scalar("train/episode_steps", steps, ep)
-                if (ep + 1) % 100 == 0:
+                if (ep + 1) % 10 == 0:
                     writer.flush()
 
             # Track best model based on moving average of last 10 episodes
@@ -277,12 +278,12 @@ def main():
 
     except KeyboardInterrupt:
         print("Training interrupted.")
+    finally:
+        if renderer:
+            renderer.close()
 
-    if renderer:
-        renderer.close()
-
-    if writer:
-        writer.close()
+        if writer:
+            writer.close()
 
     print(f"Run directory: {run_dir}")
     if writer:

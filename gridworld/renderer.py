@@ -1,9 +1,13 @@
 import warnings
+
 # Suppress pkg_resources deprecation warning from pygame
-warnings.filterwarnings("ignore", message=".*pkg_resources is deprecated.*", category=UserWarning)
+warnings.filterwarnings(
+    "ignore", message=".*pkg_resources is deprecated.*", category=UserWarning
+)
 
 import pygame
 from gridworld.config import *
+
 
 class Renderer:
     def __init__(self, title="Gridworld RL"):
@@ -17,7 +21,7 @@ class Renderer:
         self.font = pygame.font.SysFont("Arial", 18)
         self.clock = pygame.time.Clock()
 
-    def draw(self, env, episode=0, reward=0):
+    def draw(self, env, episode=0, reward=0.0):
         self.screen.fill(COLOR_BG)
 
         # Draw Grid
