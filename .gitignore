@@ -29,5 +29,6 @@ logs/*
 
 runs/
 report
+.ipynb_checkpoints
 
 .r2.env

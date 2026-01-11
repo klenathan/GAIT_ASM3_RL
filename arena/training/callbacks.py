@@ -136,15 +136,19 @@ class ArenaCallback(BaseCallback):
             self.logger.record(
                 "arena/win_rate_100ep", float(np.mean(self.episode_wins))
             )
-            self.logger.record("arena/ep_enemies_last", self.episode_enemies[-1])
-            self.logger.record("arena/ep_spawners_last", self.episode_spawners[-1])
+            self.logger.record("arena/ep_enemies_last",
+                               self.episode_enemies[-1])
+            self.logger.record("arena/ep_spawners_last",
+                               self.episode_spawners[-1])
 
         # Current episode progress (averaged across all environments)
         self.logger.record(
-            "arena/cur_ep_enemies", float(np.mean(self.current_episode_enemies))
+            "arena/cur_ep_enemies", float(
+                np.mean(self.current_episode_enemies))
         )
         self.logger.record(
-            "arena/cur_ep_spawners", float(np.mean(self.current_episode_spawners))
+            "arena/cur_ep_spawners", float(
+                np.mean(self.current_episode_spawners))
         )
         self.logger.record(
             "arena/cur_ep_rew", float(np.mean(self.current_episode_reward))
@@ -184,7 +188,8 @@ class PerformanceCallback(BaseCallback):
             if dt > 0:
                 fps = (self.num_timesteps - self.last_log_steps) / dt
                 self.logger.record("performance/fps", fps)
-                self.logger.record("performance/time_min", (now - self.start_time) / 60)
+                self.logger.record("performance/time_min",
+                                   (now - self.start_time) / 60)
             self.last_log_time, self.last_log_steps = now, self.num_timesteps
         return True
 
@@ -213,7 +218,8 @@ class HParamCallback(BaseCallback):
                     # Format values appropriately
                     if isinstance(v, float):
                         value_str = (
-                            f"{v:.6g}"  # Format floats with up to 6 significant digits
+                            # Format floats with up to 6 significant digits
+                            f"{v:.6g}"
                         )
                     elif isinstance(v, (int, str, bool)):
                         value_str = str(v)
@@ -284,7 +290,8 @@ class StyleConfigCallback(BaseCallback):
                 style_lines.append(
                     f"| Damage Taken | {self.style_config.reward_damage_taken:.2f} |"
                 )
-                style_lines.append(f"| Death | {self.style_config.reward_death:.2f} |")
+                style_lines.append(
+                    f"| Death | {self.style_config.reward_death:.2f} |")
                 style_lines.append(
                     f"| Step Survival | {self.style_config.reward_step_survival:.4f} |"
                 )
@@ -299,7 +306,8 @@ class StyleConfigCallback(BaseCallback):
                 style_lines.append(f"\n## Episode Configuration\n")
                 style_lines.append("| Parameter | Value |")
                 style_lines.append("|-----------|-------|")
-                style_lines.append(f"| Max Steps | {self.style_config.max_steps} |")
+                style_lines.append(
+                    f"| Max Steps | {self.style_config.max_steps} |")
                 style_lines.append(
                     f"| Shaping Mode | {self.style_config.shaping_mode} |"
                 )
@@ -370,7 +378,8 @@ class StyleConfigCallback(BaseCallback):
                         style_lines.append(
                             f"| Min Win Rate | {stage.min_win_rate:.2f} |"
                         )
-                        style_lines.append(f"| Min Episodes | {stage.min_episodes} |")
+                        style_lines.append(
+                            f"| Min Episodes | {stage.min_episodes} |")
                 else:
                     style_lines.append(f"\n## Curriculum Configuration\n")
                     style_lines.append("**Curriculum Enabled:** No")
@@ -483,8 +492,10 @@ class CurriculumCallback(BaseCallback):
         self.current_episode_length += 1
 
         for i, info in enumerate(infos):
-            self.current_episode_spawners[i] += int(info.get("spawners_destroyed", 0))
-            self.current_episode_enemies[i] += int(info.get("enemies_destroyed", 0))
+            self.current_episode_spawners[i] += int(
+                info.get("spawners_destroyed", 0))
+            self.current_episode_enemies[i] += int(
+                info.get("enemies_destroyed", 0))
             # Track damage taken (negative rewards from damage)
             if rewards[i] < 0:
                 self.current_episode_damage_taken[i] += abs(rewards[i])
@@ -528,10 +539,46 @@ class CurriculumCallback(BaseCallback):
                         f"[Curriculum] Advanced to stage {self.curriculum_manager.current_stage_index}: {stage.name}"
                     )
 
-        # Log curriculum status
+        # Log curriculum status and progression metrics
         self.logger.record(
             "curriculum/stage", self.curriculum_manager.current_stage_index
         )
+
+        # Log current stage parameters for monitoring
+        stage = self.curriculum_manager.current_stage
+        self.logger.record("curriculum/spawn_cooldown_mult",
+                           stage.spawn_cooldown_mult)
+        self.logger.record("curriculum/max_enemies_mult",
+                           stage.max_enemies_mult)
+        self.logger.record("curriculum/spawner_health_mult",
+                           stage.spawner_health_mult)
+        self.logger.record("curriculum/enemy_speed_mult",
+                           stage.enemy_speed_mult)
+        self.logger.record("curriculum/spawner_multiplier",
+                           stage.spawner_multiplier)
+
+        # Log advancement criteria tracking (using last 100 episodes)
+        metrics = self.curriculum_manager.metrics
+        if len(metrics.spawner_kills) >= 10:
+            window = min(100, len(metrics.spawner_kills))
+            self.logger.record("curriculum/avg_spawner_kills",
+                               float(np.mean(metrics.spawner_kills[-window:])))
+            self.logger.record("curriculum/avg_win_rate",
+                               float(np.mean(metrics.wins[-window:])))
+            self.logger.record("curriculum/avg_episode_length",
+                               float(np.mean(metrics.episode_lengths[-window:])))
+            self.logger.record("curriculum/avg_enemy_kills",
+                               float(np.mean(metrics.enemy_kills[-window:])))
+            self.logger.record("curriculum/episodes_in_stage",
+                               len(metrics.spawner_kills))
+
+            # Log target thresholds for comparison
+            self.logger.record("curriculum/target_spawner_kills",
+                               stage.min_spawner_kill_rate)
+            self.logger.record("curriculum/target_win_rate",
+                               stage.min_win_rate)
+            self.logger.record(
+                "curriculum/min_episodes_required", stage.min_episodes)
 
         return True
 

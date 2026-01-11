@@ -154,7 +154,7 @@ class ControlStyleConfig:
     shaping_clip: float = 0.2
 
     # Curriculum Learning
-    curriculum_enabled: bool = True
+    curriculum_enabled: bool = False
 
     # Style 2 specific: Aiming guidance for shooting (defaults that have no effect for style 1)
     # Bonus given ONLY when shooting while aimed at spawner (prevents exploitation)
@@ -179,6 +179,8 @@ class Style1Config(ControlStyleConfig):
     max_steps: int = 3500
     # Encourage more active play with rotation
     penalty_inactivity: float = -0.05
+    # Curriculum Learning - ENABLED for gradual difficulty progression
+    curriculum_enabled: bool = True
 
 
 @dataclass
