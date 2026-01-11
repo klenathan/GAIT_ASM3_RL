@@ -24,6 +24,19 @@
 
 ---
 
+### Evaluation: sarsa_level1
+- **Algo**: Sarsa, **Level**: 1, **Intrinsic**: False
+- **Model**: runs/gridworld/sarsa_level1/final/sarsa_level1.pkl
+- **Results**:
+    - episodes: 100
+    - wins: 100 (win_rate=1.000)
+    - deaths: 0
+    - timeouts: 0
+    - mean_return: 10.710
+    - mean_steps: 29.00
+
+---
+
 ### Evaluation: q_learning_level2
 - **Algo**: Q-Learning, **Level**: 2, **Intrinsic**: False
 - **Model**: runs/gridworld/q_learning_level2/final/q_level2.pkl
@@ -36,6 +49,20 @@
     - mean_steps: 28.00
 
 ---
+
+### Evaluation: sarsa_level3
+- **Algo**: Sarsa, **Level**: 3, **Intrinsic**: False
+- **Model**: runs/gridworld/sarsa_level3/final/sarsa_level3.pkl
+- **Results**:
+    - episodes: 100
+    - wins: 100 (win_rate=1.000)
+    - deaths: 0
+    - timeouts: 0
+    - mean_return: 14.710
+    - mean_steps: 29.00
+
+---
+
 
 ### Evaluation: q_learning_level3
 - **Algo**: Q-Learning, **Level**: 3, **Intrinsic**: False
@@ -102,31 +129,8 @@
 
 ---
 
-### Evaluation: sarsa_level1
-- **Algo**: Sarsa, **Level**: 1, **Intrinsic**: False
-- **Model**: runs/gridworld/sarsa_level1/final/sarsa_level1.pkl
-- **Results**:
-    - episodes: 100
-    - wins: 100 (win_rate=1.000)
-    - deaths: 0
-    - timeouts: 0
-    - mean_return: 10.710
-    - mean_steps: 29.00
 
----
 
-### Evaluation: sarsa_level3
-- **Algo**: Sarsa, **Level**: 3, **Intrinsic**: False
-- **Model**: runs/gridworld/sarsa_level3/final/sarsa_level3.pkl
-- **Results**:
-    - episodes: 100
-    - wins: 100 (win_rate=1.000)
-    - deaths: 0
-    - timeouts: 0
-    - mean_return: 14.710
-    - mean_steps: 29.00
-
----
 
 ### Evaluation: sarsa_level5
 - **Algo**: Sarsa, **Level**: 5, **Intrinsic**: False
