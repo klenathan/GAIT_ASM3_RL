@@ -313,7 +313,7 @@ class TrainerConfig:
 
     # DQN specific
     dqn_hidden_layers: List[int] = field(
-        default_factory=lambda: [256, 128, 128, 64])
+        default_factory=lambda: [256, 128, 64])
     dqn_activation: str = "SiLU"
 
     # PPO specific

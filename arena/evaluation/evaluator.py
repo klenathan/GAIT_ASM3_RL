@@ -2,27 +2,30 @@
 Model evaluation logic for Deep RL Arena.
 """
 
-from arena.training.algorithms import dqn, ppo, ppo_lstm, a2c
-from arena.training.registry import AlgorithmRegistry
-from arena.training.training_state import find_training_state
-from arena.ui.model_output import ModelOutputExtractor
-from arena.ui.menu import Menu
-from arena.ui.renderer import ArenaRenderer
-from arena.game.human_controller import HumanController
-from arena.core.environment_dict import ArenaDictEnv
-from arena.core.environment_cnn import ArenaCNNEnv
-from arena.core.environment import ArenaEnv
-from arena.core.curriculum import CurriculumManager, CurriculumConfig
-from arena.core import config
-from arena.core.device import DeviceManager
-from arena.core.config import TrainerConfig
-from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
-import torch
-import numpy as np
-import pygame
 import glob
 import os
 import warnings
+
+import numpy as np
+import pygame
+import torch
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+
+from arena.core import config
+from arena.core.config import TrainerConfig
+from arena.core.curriculum import CurriculumConfig, CurriculumManager
+from arena.core.device import DeviceManager
+from arena.core.environment import ArenaEnv
+from arena.core.environment_cnn import ArenaCNNEnv
+from arena.core.environment_dict import ArenaDictEnv
+from arena.game.human_controller import HumanController
+from arena.training.algorithms import dqn, ppo, ppo_lstm
+from arena.training.registry import AlgorithmRegistry
+from arena.training.training_state import find_training_state
+from arena.ui.menu import Menu
+from arena.ui.model_output import ModelOutputExtractor
+from arena.ui.renderer import ArenaRenderer
+
 # Suppress pkg_resources deprecation warning from pygame
 warnings.filterwarnings(
     "ignore", message=".*pkg_resources is deprecated.*", category=UserWarning)
@@ -139,15 +142,18 @@ class Evaluator:
 
             # If we know the step count, look for exact match first
             if model_steps:
-                exact_pattern = os.path.join(model_dir, f"{run_prefix}_vecnormalize_{model_steps}_steps.pkl")
+                exact_pattern = os.path.join(
+                    model_dir, f"{run_prefix}_vecnormalize_{model_steps}_steps.pkl")
                 if os.path.exists(exact_pattern):
                     return exact_pattern
 
                 # Search in parent directory structure for exact match
                 parent_dir = os.path.dirname(model_dir)
                 for subdir in ['checkpoints', 'final', '.']:
-                    search_dir = os.path.join(parent_dir, subdir) if subdir != '.' else parent_dir
-                    exact_pattern = os.path.join(search_dir, f"{run_prefix}_vecnormalize_{model_steps}_steps.pkl")
+                    search_dir = os.path.join(
+                        parent_dir, subdir) if subdir != '.' else parent_dir
+                    exact_pattern = os.path.join(
+                        search_dir, f"{run_prefix}_vecnormalize_{model_steps}_steps.pkl")
                     if os.path.exists(exact_pattern):
                         return exact_pattern
 
@@ -217,7 +223,7 @@ class Evaluator:
     def run_session(self, model_path: str, style: int, deterministic: bool = True,
                     curriculum_stage: int = None, auto_curriculum: bool = False):
         """Run a single evaluation session.
-        
+
         Args:
             model_path: Path to the model file
             style: Control style (1 or 2)
@@ -237,16 +243,19 @@ class Evaluator:
             training_state = find_training_state(model_path)
             if training_state:
                 effective_curriculum_stage = training_state.curriculum_stage_index
-                print(f"✓ Auto-detected curriculum stage: {effective_curriculum_stage}")
+                print(
+                    f"✓ Auto-detected curriculum stage: {effective_curriculum_stage}")
             else:
                 print("⚠ No training state found, using full difficulty (no curriculum)")
-        
+
         # Create curriculum manager if stage specified
         curriculum_manager = None
         if effective_curriculum_stage is not None:
-            curriculum_manager = CurriculumManager(CurriculumConfig(enabled=True))
+            curriculum_manager = CurriculumManager(
+                CurriculumConfig(enabled=True))
             curriculum_manager.current_stage_index = effective_curriculum_stage
-            print(f"✓ Using curriculum stage {effective_curriculum_stage}: {curriculum_manager.current_stage.name}")
+            print(
+                f"✓ Using curriculum stage {effective_curriculum_stage}: {curriculum_manager.current_stage.name}")
 
         # Create base environment - use ArenaDictEnv for ppo_dict, ArenaCNNEnv for ppo_cnn, ArenaEnv for others
         # Set render_mode="human" to enable audio during model play
@@ -256,7 +265,7 @@ class Evaluator:
             base_env = ArenaCNNEnv(control_style=style, render_mode="human")
         else:
             base_env = ArenaEnv(control_style=style, render_mode="human",
-                               curriculum_manager=curriculum_manager)
+                                curriculum_manager=curriculum_manager)
         base_env.renderer = self.renderer
         base_env._owns_renderer = False
 
@@ -360,7 +369,8 @@ class Evaluator:
                 info = infos[0]
                 if info.get('win', False):
                     # Show victory screen
-                    underlying_env = self.env.envs[0] if hasattr(self.env, 'envs') else self.env.venv.envs[0]
+                    underlying_env = self.env.envs[0] if hasattr(
+                        self.env, 'envs') else self.env.venv.envs[0]
                     self.renderer.draw_victory_screen(
                         info['win_step'],
                         info.get('episode_reward', rewards[0]),
@@ -373,7 +383,7 @@ class Evaluator:
                         return "menu"
                     elif result == "quit":
                         return "quit"
-                
+
                 obs = self.env.reset()
                 if isinstance(obs, tuple):
                     obs = obs[0]
@@ -477,7 +487,7 @@ class Evaluator:
                         return "menu"
                     elif result == "quit":
                         return "quit"
-                
+
                 obs, _ = self.env.reset()
                 metrics['episode'] += 1
                 metrics['episode_reward'] = 0.0
@@ -511,11 +521,13 @@ class Evaluator:
                                     selection["style"])
                             else:
                                 state = self.run_session(
-                                    selection["model"], 
-                                    selection["style"], 
+                                    selection["model"],
+                                    selection["style"],
                                     selection["deterministic"],
-                                    curriculum_stage=selection.get("curriculum_stage"),
-                                    auto_curriculum=selection.get("auto_curriculum", False)
+                                    curriculum_stage=selection.get(
+                                        "curriculum_stage"),
+                                    auto_curriculum=selection.get(
+                                        "auto_curriculum", False)
                                 )
                         else:
                             if self.menu.gameplay_modes[self.menu.selected_mode_idx] == "Model":

@@ -2,14 +2,16 @@
 In-game menu for evaluation configuration.
 """
 
-from arena.training.algorithms import dqn, ppo, ppo_lstm, a2c
+import os
+import warnings
+
+import pygame
+
+from arena.core import config
+from arena.core.curriculum import CurriculumConfig, CurriculumManager
+from arena.training.algorithms import dqn, ppo, ppo_lstm
 from arena.training.registry import AlgorithmRegistry
 from arena.training.training_state import find_training_state
-from arena.core.curriculum import CurriculumManager, CurriculumConfig
-from arena.core import config
-import os
-import pygame
-import warnings
 
 # Suppress pkg_resources deprecation warning from pygame
 warnings.filterwarnings(
@@ -41,12 +43,13 @@ class Menu:
         self.styles = [1, 2]
         self.selected_style_idx = 0
 
-        self.deterministic = True
+        self.deterministic = False
         self.show_all_models = False  # Toggle for showing all vs filtered
 
         # Curriculum options: None (full difficulty), 0-6 (stages), or "auto"
         # Style 1 has stages 0-5, Style 2 has stages 0-5 (6 total stages each)
-        self.curriculum_options = ["None", "Auto", "0", "1", "2", "3", "4", "5"]
+        self.curriculum_options = [
+            "None", "Auto", "0", "1", "2", "3", "4", "5"]
         self.selected_curriculum_idx = 1  # Default to "Auto"
 
         # Apply initial filter
@@ -72,6 +75,10 @@ class Menu:
         self.hovered_button = None
         self.pressed_button = None
         self.hovered_model_idx = -1
+
+        # Dropdown state
+        self.active_dropdown = None  # Which dropdown is currently open
+        self.dropdown_hover_idx = -1  # Which item in dropdown is hovered
 
     def _scan_models(self):
         """Scan both new runs directory and legacy models directory for .zip files."""
@@ -122,7 +129,8 @@ class Menu:
         if os.path.exists(legacy_models_dir):
             for algo in self.algos:
                 for style in [1, 2]:
-                    style_dir = os.path.join(legacy_models_dir, algo, f"style{style}")
+                    style_dir = os.path.join(
+                        legacy_models_dir, algo, f"style{style}")
                     if not os.path.exists(style_dir):
                         continue
                     for f in os.listdir(style_dir):
@@ -181,6 +189,15 @@ class Menu:
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:
                     x, y = event.pos
+
+                    # Check if clicking outside dropdown to close it
+                    if self.active_dropdown:
+                        dropdown_handled = self._handle_dropdown_click(
+                            event.pos)
+                        if not dropdown_handled:
+                            self.active_dropdown = None
+                        continue  # Don't handle other clicks while dropdown is open
+
                     if self.sidebar_x <= x <= self.sidebar_x + 150 and 500 <= y <= 550:
                         self.pressed_button = "start"
 
@@ -204,7 +221,8 @@ class Menu:
 
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_UP:
-                    self.selected_model_idx = max(0, self.selected_model_idx - 1)
+                    self.selected_model_idx = max(
+                        0, self.selected_model_idx - 1)
                     if self.selected_model_idx < self.scroll_offset:
                         self.scroll_offset = self.selected_model_idx
                 elif event.key == pygame.K_DOWN:
@@ -224,7 +242,10 @@ class Menu:
                         return None
                     return "start"
                 elif event.key == pygame.K_ESCAPE:
-                    return "quit"
+                    if self.active_dropdown:
+                        self.active_dropdown = None
+                    else:
+                        return "quit"
 
         return None
 
@@ -232,7 +253,8 @@ class Menu:
         """Handle mouse clicks on UI elements."""
         x, y = pos
         if self.list_x <= x <= self.list_x + self.list_width:
-            item_idx = (y - self.list_y) // self.item_height + self.scroll_offset
+            item_idx = (y - self.list_y) // self.item_height + \
+                self.scroll_offset
             if 0 <= item_idx < len(self.models):
                 if self.list_y <= y <= self.list_y + self.list_height:
                     self.selected_model_idx = item_idx
@@ -240,7 +262,8 @@ class Menu:
         if self.sidebar_x <= x <= self.sidebar_x + 150 and 500 <= y <= 550:
             is_human = self.gameplay_modes[self.selected_mode_idx] == "Human Player"
             if not is_human and len(self.models) == 0:
-                self.set_status("No models available.", "warning", duration=4000)
+                self.set_status("No models available.",
+                                "warning", duration=4000)
                 return None
             return "start"
 
@@ -248,13 +271,15 @@ class Menu:
         """Draw the menu."""
         self.screen.fill(config.COLOR_BACKGROUND)
 
-        title = self.title_font.render("Arena Evaluation Menu", True, (255, 255, 255))
+        title = self.title_font.render(
+            "Arena Evaluation Menu", True, (255, 255, 255))
         self.screen.blit(title, (50, 30))
 
         is_human = self.gameplay_modes[self.selected_mode_idx] == "Human Player"
 
         if not is_human and len(self.models) == 0:
-            warning_text = self.font.render("No models found", True, (255, 180, 50))
+            warning_text = self.font.render(
+                "No models found", True, (255, 180, 50))
             self.screen.blit(warning_text, (50, 520))
 
         pygame.draw.rect(
@@ -311,14 +336,16 @@ class Menu:
                 if self.font.size(display_text)[0] > max_text_width:
                     # Dynamically truncate to fit within available width
                     while (
-                        self.font.size(display_text + "...")[0] > max_text_width
+                        self.font.size(
+                            display_text + "...")[0] > max_text_width
                         and len(display_text) > 10
                     ):
                         display_text = display_text[:-1]
                     display_text = display_text.rstrip() + "..."
                 text = self.font.render(display_text, True, text_color)
                 self.screen.blit(
-                    text, (self.list_x + 10, self.list_y + i * self.item_height + 5)
+                    text, (self.list_x + 10, self.list_y +
+                           i * self.item_height + 5)
                 )
 
             if len(self.models) > visible_count:
@@ -366,7 +393,8 @@ class Menu:
             ]
             for line in lines:
                 color = (
-                    (200, 200, 200) if not line.startswith("  ") else (150, 150, 150)
+                    (200, 200, 200) if not line.startswith(
+                        "  ") else (150, 150, 150)
                 )
                 if ":" in line:
                     color = (255, 255, 100)
@@ -375,71 +403,65 @@ class Menu:
                 controls_y += 25
 
         y = self.sidebar_y
-        self._draw_option_toggle(
+        self._draw_dropdown_option(
             self.sidebar_x,
             y,
             "Gameplay Mode:",
-            self.gameplay_modes[self.selected_mode_idx],
+            self.gameplay_modes,
             self.selected_mode_idx,
-            len(self.gameplay_modes),
-            hovered=(self.hovered_button == "mode"),
+            "mode",
         )
         y += 60
 
-        self._draw_option_toggle(
+        self._draw_dropdown_option(
             self.sidebar_x,
             y,
             "Control Style:",
-            f"Style {self.styles[self.selected_style_idx]}",
+            [f"Style {s}" for s in self.styles],
             self.selected_style_idx,
-            len(self.styles),
-            hovered=(self.hovered_button == "style"),
+            "style",
         )
         y += 60
 
         if not is_human:
-            self._draw_option_toggle(
+            self._draw_dropdown_option(
                 self.sidebar_x,
                 y,
                 "Algorithm:",
-                self.algos[self.selected_algo_idx].upper(),
+                [algo.upper() for algo in self.algos],
                 self.selected_algo_idx,
-                len(self.algos),
-                hovered=(self.hovered_button == "algo"),
+                "algo",
             )
             y += 60
-            det_text = "Yes" if self.deterministic else "No"
-            self._draw_option_toggle(
+
+            self._draw_dropdown_option(
                 self.sidebar_x,
                 y,
                 "Deterministic:",
-                det_text,
+                ["Yes", "No"],
                 0 if self.deterministic else 1,
-                2,
-                hovered=(self.hovered_button == "deterministic"),
+                "deterministic",
             )
             y += 60
-            # Curriculum stage toggle
-            curr_text = self.curriculum_options[self.selected_curriculum_idx]
-            self._draw_option_toggle(
+
+            # Curriculum stage dropdown
+            self._draw_dropdown_option(
                 self.sidebar_x,
                 y,
                 "Curriculum:",
-                curr_text,
+                self.curriculum_options,
                 self.selected_curriculum_idx,
-                len(self.curriculum_options),
-                hovered=(self.hovered_button == "curriculum"),
+                "curriculum",
             )
             y += 60
-            filter_text = "All Models" if self.show_all_models else "Filtered"
-            self._draw_option_toggle(
+
+            self._draw_dropdown_option(
                 self.sidebar_x,
                 y,
                 "Display Mode:",
-                filter_text,
+                ["All Models", "Filtered"],
                 0 if self.show_all_models else 1,
-                2,
-                hovered=(self.hovered_button == "show_all"),
+                "show_all",
             )
             y += 50
 
@@ -459,7 +481,8 @@ class Menu:
 
             # Model count indicator
             count_text = f"Models: {len(self.models)}/{len(self.all_models)}"
-            count_surf = self.small_font.render(count_text, True, (150, 200, 255))
+            count_surf = self.small_font.render(
+                count_text, True, (150, 200, 255))
             self.screen.blit(count_surf, (self.sidebar_x, y))
             y += 40
 
@@ -504,8 +527,176 @@ class Menu:
         if self.hovered_model_idx >= 0 and self.hovered_model_idx < len(self.models):
             self._draw_model_tooltip()
 
+        # Draw active dropdown on top of everything
+        if self.active_dropdown:
+            self._draw_active_dropdown()
+
+    def _draw_dropdown_option(self, x, y, label, options, selected_idx, dropdown_id):
+        """Draw a dropdown option with label and current value."""
+        is_open = self.active_dropdown == dropdown_id
+        is_hovered = self.hovered_button == dropdown_id
+
+        # Store dropdown bounds for click detection
+        dropdown_width = 240
+        dropdown_height = 45
+
+        # Background
+        if is_open:
+            bg_color = (50, 50, 90)
+            border_color = (100, 200, 255)
+        elif is_hovered:
+            bg_color = (40, 40, 70)
+            border_color = (100, 150, 200)
+        else:
+            bg_color = (30, 30, 50)
+            border_color = (80, 80, 120)
+
+        bg_rect = pygame.Rect(x - 5, y - 5, dropdown_width, dropdown_height)
+        pygame.draw.rect(self.screen, bg_color, bg_rect)
+        pygame.draw.rect(self.screen, border_color, bg_rect, 2)
+
+        # Label
+        label_surf = self.small_font.render(label, True, (180, 180, 180))
+        self.screen.blit(label_surf, (x, y))
+
+        # Selected value
+        value_text = options[selected_idx]
+        val_surf = self.font.render(value_text, True, (255, 255, 100))
+        self.screen.blit(val_surf, (x, y + 20))
+
+        # Dropdown arrow
+        arrow = "▼" if not is_open else "▲"
+        arrow_surf = self.small_font.render(arrow, True, (150, 150, 200))
+        self.screen.blit(arrow_surf, (x + dropdown_width - 25, y + 15))
+
+    def _draw_active_dropdown(self):
+        """Draw the dropdown menu for the currently active dropdown."""
+        if not self.active_dropdown:
+            return
+
+        # Determine which dropdown and get its options
+        dropdown_data = self._get_dropdown_data(self.active_dropdown)
+        if not dropdown_data:
+            return
+
+        options, selected_idx, y_pos = dropdown_data
+
+        dropdown_width = 240
+        item_height = 30
+        dropdown_height = len(options) * item_height
+
+        # Position dropdown below the selector
+        dropdown_x = self.sidebar_x - 5
+        dropdown_y = y_pos + 45
+
+        # Draw dropdown background
+        dropdown_rect = pygame.Rect(
+            dropdown_x, dropdown_y, dropdown_width, dropdown_height)
+        pygame.draw.rect(self.screen, (25, 25, 45), dropdown_rect)
+        pygame.draw.rect(self.screen, (100, 150, 255), dropdown_rect, 2)
+
+        # Draw each option
+        for i, option in enumerate(options):
+            item_y = dropdown_y + i * item_height
+            item_rect = pygame.Rect(
+                dropdown_x, item_y, dropdown_width, item_height)
+
+            # Highlight selected item
+            if i == selected_idx:
+                pygame.draw.rect(self.screen, (60, 60, 100), item_rect)
+            # Highlight hovered item
+            elif i == self.dropdown_hover_idx:
+                pygame.draw.rect(self.screen, (45, 45, 80), item_rect)
+
+            # Draw option text
+            color = (255, 255, 255) if i == selected_idx else (200, 200, 200)
+            text_surf = self.small_font.render(option, True, color)
+            self.screen.blit(text_surf, (dropdown_x + 10, item_y + 7))
+
+            # Draw checkmark for selected item
+            if i == selected_idx:
+                check_surf = self.small_font.render("✓", True, (100, 255, 100))
+                self.screen.blit(
+                    check_surf, (dropdown_x + dropdown_width - 25, item_y + 7))
+
+    def _get_dropdown_data(self, dropdown_id):
+        """Get data for a specific dropdown."""
+        is_human = self.gameplay_modes[self.selected_mode_idx] == "Human Player"
+
+        # Calculate y position based on dropdown order
+        y_base = self.sidebar_y
+
+        if dropdown_id == "mode":
+            return (self.gameplay_modes, self.selected_mode_idx, y_base)
+        elif dropdown_id == "style":
+            return ([f"Style {s}" for s in self.styles], self.selected_style_idx, y_base + 60)
+        elif dropdown_id == "algo" and not is_human:
+            return ([algo.upper() for algo in self.algos], self.selected_algo_idx, y_base + 120)
+        elif dropdown_id == "deterministic" and not is_human:
+            idx = 0 if self.deterministic else 1
+            return (["Yes", "No"], idx, y_base + 180)
+        elif dropdown_id == "curriculum" and not is_human:
+            return (self.curriculum_options, self.selected_curriculum_idx, y_base + 240)
+        elif dropdown_id == "show_all" and not is_human:
+            idx = 0 if self.show_all_models else 1
+            return (["All Models", "Filtered"], idx, y_base + 300)
+
+        return None
+
+    def _handle_dropdown_click(self, pos):
+        """Handle clicks on dropdown menu items. Returns True if click was in dropdown."""
+        if not self.active_dropdown:
+            return False
+
+        dropdown_data = self._get_dropdown_data(self.active_dropdown)
+        if not dropdown_data:
+            return False
+
+        options, selected_idx, y_pos = dropdown_data
+
+        dropdown_width = 240
+        item_height = 30
+        dropdown_height = len(options) * item_height
+
+        dropdown_x = self.sidebar_x - 5
+        dropdown_y = y_pos + 45
+
+        x, y = pos
+
+        # Check if click is within dropdown bounds
+        if dropdown_x <= x <= dropdown_x + dropdown_width and dropdown_y <= y <= dropdown_y + dropdown_height:
+            # Calculate which item was clicked
+            item_idx = (y - dropdown_y) // item_height
+            if 0 <= item_idx < len(options):
+                # Update selection based on dropdown type
+                self._update_selection(self.active_dropdown, item_idx)
+                self.active_dropdown = None
+                return True
+
+        # Click outside dropdown
+        return False
+
+    def _update_selection(self, dropdown_id, item_idx):
+        """Update the selected value for a dropdown."""
+        if dropdown_id == "mode":
+            self.selected_mode_idx = item_idx
+            self._filter_models()
+        elif dropdown_id == "style":
+            self.selected_style_idx = item_idx
+            self._filter_models()
+        elif dropdown_id == "algo":
+            self.selected_algo_idx = item_idx
+            self._filter_models()
+        elif dropdown_id == "deterministic":
+            self.deterministic = (item_idx == 0)
+        elif dropdown_id == "curriculum":
+            self.selected_curriculum_idx = item_idx
+        elif dropdown_id == "show_all":
+            self.show_all_models = (item_idx == 0)
+            self._filter_models()
+
     def _draw_option_toggle(self, x, y, label, value, current, total, hovered=False):
-        """Draw an option toggle."""
+        """Draw an option toggle (deprecated, kept for compatibility)."""
         if hovered:
             bg_rect = pygame.Rect(x - 5, y - 5, 250, 45)
             pygame.draw.rect(self.screen, (40, 40, 60), bg_rect)
@@ -524,7 +715,8 @@ class Menu:
         banner_width = config.SCREEN_WIDTH - 100
 
         pygame.draw.rect(
-            self.screen, (30, 30, 80), (banner_x, banner_y, banner_width, banner_height)
+            self.screen, (30, 30, 80), (banner_x, banner_y,
+                                        banner_width, banner_height)
         )
         pygame.draw.rect(
             self.screen,
@@ -533,27 +725,31 @@ class Menu:
             2,
         )
 
-        text_surf = self.font.render(self.status_message, True, (255, 255, 255))
+        text_surf = self.font.render(
+            self.status_message, True, (255, 255, 255))
         self.screen.blit(text_surf, (banner_x + 20, banner_y + 15))
 
     def _draw_loading_spinner(self, x, y, radius=15):
         """Draw animated loading spinner."""
         import math
 
-        pygame.draw.circle(self.screen, (50, 50, 80), (int(x), int(y)), radius, 2)
+        pygame.draw.circle(self.screen, (50, 50, 80),
+                           (int(x), int(y)), radius, 2)
         arc_length = 120
         start_angle = math.radians(self.loading_angle)
         end_angle = math.radians(self.loading_angle + arc_length)
         num_segments = 10
         for i in range(num_segments):
             angle1 = start_angle + (end_angle - start_angle) * i / num_segments
-            angle2 = start_angle + (end_angle - start_angle) * (i + 1) / num_segments
+            angle2 = start_angle + \
+                (end_angle - start_angle) * (i + 1) / num_segments
             x1 = x + radius * math.cos(angle1)
             y1 = y + radius * math.sin(angle1)
             x2 = x + radius * math.cos(angle2)
             y2 = y + radius * math.sin(angle2)
             pygame.draw.line(
-                self.screen, (100, 200, 255), (int(x1), int(y1)), (int(x2), int(y2)), 3
+                self.screen, (100, 200, 255), (int(
+                    x1), int(y1)), (int(x2), int(y2)), 3
             )
 
     def _draw_model_tooltip(self):
@@ -581,7 +777,8 @@ class Menu:
             tooltip_y = mouse_y + 20
 
         # Draw tooltip background with border
-        tooltip_rect = pygame.Rect(tooltip_x, tooltip_y, tooltip_width, tooltip_height)
+        tooltip_rect = pygame.Rect(
+            tooltip_x, tooltip_y, tooltip_width, tooltip_height)
         pygame.draw.rect(self.screen, (20, 20, 35), tooltip_rect)
         pygame.draw.rect(self.screen, (100, 150, 255), tooltip_rect, 2)
 
@@ -624,36 +821,27 @@ class Menu:
 
     def handle_sidebar_clicks(self, pos):
         x, y = pos
-        if not (self.sidebar_x <= x <= self.sidebar_x + 250):
+        if not (self.sidebar_x - 5 <= x <= self.sidebar_x + 250):
             return
         y_rel = y - self.sidebar_y
 
         is_human = self.gameplay_modes[self.selected_mode_idx] == "Human Player"
 
-        if 0 <= y_rel <= 40:
-            self.selected_mode_idx = (self.selected_mode_idx + 1) % len(
-                self.gameplay_modes
-            )
-            self._filter_models()
-        elif 60 <= y_rel <= 100:
-            self.selected_style_idx = (self.selected_style_idx + 1) % len(self.styles)
-            self._filter_models()
-
+        # Open dropdowns instead of cycling values
+        if -5 <= y_rel <= 40:
+            self.active_dropdown = "mode"
+        elif 55 <= y_rel <= 100:
+            self.active_dropdown = "style"
         # Only handle these if in Model mode
-        if not is_human:
-            if 120 <= y_rel <= 160:
-                self.selected_algo_idx = (self.selected_algo_idx + 1) % len(self.algos)
-                self._filter_models()
-            elif 180 <= y_rel <= 220:
-                self.deterministic = not self.deterministic
-            elif 240 <= y_rel <= 280:
-                # Curriculum toggle
-                self.selected_curriculum_idx = (self.selected_curriculum_idx + 1) % len(
-                    self.curriculum_options
-                )
-            elif 300 <= y_rel <= 340:
-                self.show_all_models = not self.show_all_models
-                self._filter_models()
+        elif not is_human:
+            if 115 <= y_rel <= 160:
+                self.active_dropdown = "algo"
+            elif 175 <= y_rel <= 220:
+                self.active_dropdown = "deterministic"
+            elif 235 <= y_rel <= 280:
+                self.active_dropdown = "curriculum"
+            elif 295 <= y_rel <= 340:
+                self.active_dropdown = "show_all"
             elif 350 <= y_rel <= 390:
                 self.refresh_models()
         else:
@@ -676,12 +864,29 @@ class Menu:
         x, y = pos
         self.hovered_button = None
         self.hovered_model_idx = -1
+        self.dropdown_hover_idx = -1
 
         is_human = self.gameplay_modes[self.selected_mode_idx] == "Human Player"
 
+        # Check if hovering over active dropdown items
+        if self.active_dropdown:
+            dropdown_data = self._get_dropdown_data(self.active_dropdown)
+            if dropdown_data:
+                options, selected_idx, y_pos = dropdown_data
+                dropdown_width = 240
+                item_height = 30
+                dropdown_x = self.sidebar_x - 5
+                dropdown_y = y_pos + 45
+
+                if dropdown_x <= x <= dropdown_x + dropdown_width:
+                    if dropdown_y <= y <= dropdown_y + len(options) * item_height:
+                        self.dropdown_hover_idx = (
+                            y - dropdown_y) // item_height
+
         if not is_human and self.list_x <= x <= self.list_x + self.list_width:
             if self.list_y <= y <= self.list_y + self.list_height:
-                item_idx = (y - self.list_y) // self.item_height + self.scroll_offset
+                item_idx = (y - self.list_y) // self.item_height + \
+                    self.scroll_offset
                 if 0 <= item_idx < len(self.models):
                     self.hovered_model_idx = item_idx
 
@@ -689,22 +894,22 @@ class Menu:
             if is_human or len(self.models) > 0:
                 self.hovered_button = "start"
 
-        if self.sidebar_x <= x <= self.sidebar_x + 250:
+        if self.sidebar_x - 5 <= x <= self.sidebar_x + 240:
             y_rel = y - self.sidebar_y
-            if 0 <= y_rel <= 40:
+            if -5 <= y_rel <= 40:
                 self.hovered_button = "mode"
-            elif 60 <= y_rel <= 100:
+            elif 55 <= y_rel <= 100:
                 self.hovered_button = "style"
 
             # Only handle these if in Model mode
             if not is_human:
-                if 120 <= y_rel <= 160:
+                if 115 <= y_rel <= 160:
                     self.hovered_button = "algo"
-                elif 180 <= y_rel <= 220:
+                elif 175 <= y_rel <= 220:
                     self.hovered_button = "deterministic"
-                elif 240 <= y_rel <= 280:
+                elif 235 <= y_rel <= 280:
                     self.hovered_button = "curriculum"
-                elif 300 <= y_rel <= 340:
+                elif 295 <= y_rel <= 340:
                     self.hovered_button = "show_all"
                 elif 350 <= y_rel <= 390:
                     self.hovered_button = "refresh"
