@@ -174,13 +174,13 @@ class Style1Config(ControlStyleConfig):
     """
 
     # Style 1 may benefit from stronger shaping initially due to rotation complexity
-    shaping_scale: float = 1.2
+    shaping_scale: float = 1
     # Slightly longer episodes to account for rotation learning curve
     max_steps: int = 3500
     # Encourage more active play with rotation
     penalty_inactivity: float = -0.05
     # Curriculum Learning
-    curriculum_enabled: bool = True
+    curriculum_enabled: bool = False
 
 
 @dataclass

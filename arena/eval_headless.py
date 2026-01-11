@@ -897,6 +897,55 @@ def find_models_in_directory(directory: str, pattern: str = "*.zip") -> List[str
     return [str(m) for m in models]
 
 
+def _evaluate_single_model(
+    model_path: str,
+    style: Optional[int],
+    num_episodes: int,
+    deterministic: bool,
+    algo: Optional[str],
+    save_episodes: bool,
+    curriculum_stage: Optional[int],
+    auto_curriculum: bool,
+    num_workers: int,
+    device: str,
+    quiet: bool
+) -> Tuple[str, Optional['ModelEvaluation'], Optional[str]]:
+    """
+    Evaluate a single model in a separate process.
+    
+    This function is designed to be called via ProcessPoolExecutor.
+    It creates its own HeadlessEvaluator instance since objects can't be
+    shared across processes.
+    
+    Returns:
+        Tuple of (model_path, ModelEvaluation or None, error_message or None)
+    """
+    try:
+        # Create evaluator in this process
+        evaluator = HeadlessEvaluator(device=device, verbose=not quiet)
+        
+        # Auto-detect style if not specified
+        if style is None:
+            style = evaluator._infer_style(model_path)
+        
+        eval_result = evaluator.evaluate_model(
+            model_path=model_path,
+            style=style,
+            num_episodes=num_episodes,
+            deterministic=deterministic,
+            algo=algo,
+            save_episodes=save_episodes,
+            curriculum_stage=curriculum_stage,
+            auto_curriculum=auto_curriculum,
+            num_workers=num_workers
+        )
+        return (model_path, eval_result, None)
+    except Exception as e:
+        import traceback
+        error_msg = f"{e}\n{traceback.format_exc()}"
+        return (model_path, None, error_msg)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Headless evaluation script for Deep RL Arena models",
@@ -967,49 +1016,102 @@ def main():
         print("Error: No valid model paths provided")
         return
 
-    # Create evaluator
-    evaluator = HeadlessEvaluator(device=args.device, verbose=not args.quiet)
-
     # Run evaluations
     evaluations = []
+    num_models = len(model_paths)
 
-    if args.workers > 1 and len(model_paths) > 1:
-        # When evaluating multiple models with parallel workers, we use the workers
-        # for parallel episodes within each model (not parallel models)
-        print(
-            f"Using {args.workers} parallel environments per model for evaluation...")
+    # Decide whether to parallelize across models
+    # Use parallel model evaluation when we have multiple models
+    # Limit parallel processes to avoid overwhelming system resources
+    max_model_workers = min(num_models, os.cpu_count() or 4)
+    use_parallel_models = num_models > 1 and max_model_workers > 1
 
-    for model_path in model_paths:
-        try:
-            # Auto-detect style from model path if not specified
-            style = args.style
-            if style is None:
-                style = evaluator._infer_style(model_path)
-                if not args.quiet:
-                    print(f"Auto-detected style: {style} (from model path)")
-
-            eval_result = evaluator.evaluate_model(
-                model_path=model_path,
-                style=style,
-                num_episodes=args.episodes,
-                deterministic=not args.stochastic,
-                algo=args.algo,
-                save_episodes=args.save_episodes,
-                curriculum_stage=args.curriculum_stage,
-                auto_curriculum=args.auto_curriculum,
-                num_workers=args.workers
-            )
-            evaluations.append(eval_result)
-
-            # Print summary after each model
-            if not args.quiet:
+    if use_parallel_models:
+        # Parallel evaluation of multiple models using ProcessPoolExecutor
+        print(f"\nEvaluating {num_models} models in parallel (up to {max_model_workers} concurrent)...")
+        if args.workers > 1:
+            print(f"Each model uses {args.workers} parallel environments for episodes.")
+        
+        with ProcessPoolExecutor(max_workers=max_model_workers) as executor:
+            # Submit all model evaluations
+            futures = {
+                executor.submit(
+                    _evaluate_single_model,
+                    model_path=model_path,
+                    style=args.style,
+                    num_episodes=args.episodes,
+                    deterministic=not args.stochastic,
+                    algo=args.algo,
+                    save_episodes=args.save_episodes,
+                    curriculum_stage=args.curriculum_stage,
+                    auto_curriculum=args.auto_curriculum,
+                    num_workers=args.workers,
+                    device=args.device,
+                    quiet=True  # Suppress per-model output in parallel mode
+                ): model_path for model_path in model_paths
+            }
+            
+            # Collect results as they complete
+            completed = 0
+            for future in as_completed(futures):
+                completed += 1
+                model_path, eval_result, error = future.result()
+                model_name = os.path.basename(model_path)
+                
+                if eval_result is not None:
+                    evaluations.append(eval_result)
+                    print(f"  [{completed}/{num_models}] {model_name}: "
+                          f"Win rate {eval_result.win_rate*100:.1f}%, "
+                          f"Avg reward {eval_result.mean_reward:.1f}")
+                else:
+                    error_first_line = error.split('\n')[0] if error else "Unknown error"
+                    print(f"  [{completed}/{num_models}] {model_name}: FAILED - {error_first_line}")
+        
+        # Print detailed summaries after all complete (if not quiet)
+        if not args.quiet:
+            print("\n" + "="*80)
+            print("DETAILED RESULTS")
+            print("="*80)
+            for eval_result in evaluations:
                 print_evaluation_summary(eval_result)
+    else:
+        # Sequential evaluation (single model or parallel disabled)
+        evaluator = HeadlessEvaluator(device=args.device, verbose=not args.quiet)
+        
+        if args.workers > 1:
+            print(f"Using {args.workers} parallel environments for evaluation...")
 
-        except Exception as e:
-            print(f"Error evaluating {model_path}: {e}")
-            import traceback
-            traceback.print_exc()
-            continue
+        for model_path in model_paths:
+            try:
+                # Auto-detect style from model path if not specified
+                style = args.style
+                if style is None:
+                    style = evaluator._infer_style(model_path)
+                    if not args.quiet:
+                        print(f"Auto-detected style: {style} (from model path)")
+
+                eval_result = evaluator.evaluate_model(
+                    model_path=model_path,
+                    style=style,
+                    num_episodes=args.episodes,
+                    deterministic=not args.stochastic,
+                    algo=args.algo,
+                    save_episodes=args.save_episodes,
+                    curriculum_stage=args.curriculum_stage,
+                    auto_curriculum=args.auto_curriculum,
+                    num_workers=args.workers
+                )
+                evaluations.append(eval_result)
+
+                # Print summary after each model
+                if not args.quiet:
+                    print_evaluation_summary(eval_result)
+
+            except Exception as e:
+                print(f"Error evaluating {model_path}: {e}")
+                import traceback
+                traceback.print_exc()
+                continue
 
     # Print comparison if multiple models
     if len(evaluations) > 1 and (args.compare or not args.quiet):

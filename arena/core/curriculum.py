@@ -380,7 +380,7 @@ def get_style1_stages() -> List[CurriculumStage]:
             name="Grade 3: Aggressive Combat",
             spawn_cooldown_mult=1.3,  # Near-normal spawn rate
             max_enemies_mult=0.85,  # Near-normal enemy count
-            spawner_multiplier=1.3,  # More spawners for challenge
+            spawner_multiplier=1.2,  # More spawners for challenge
             spawner_health_mult=0.9,  # Near-normal health
             enemy_speed_mult=0.95,  # Near-normal speed
             shaping_scale_mult=1.0,  # CONSTANT
