@@ -3,6 +3,7 @@ Custom callbacks for training monitoring and TensorBoard logging.
 """
 
 from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
+from stable_baselines3.common.vec_env import VecNormalize
 import numpy as np
 import time
 import os
@@ -538,6 +539,11 @@ class CurriculumCallback(BaseCallback):
                     print(
                         f"[Curriculum] Advanced to stage {self.curriculum_manager.current_stage_index}: {stage.name}"
                     )
+                
+                # Reset VecNormalize reward statistics to prevent distribution mismatch
+                # This is critical for curriculum learning - old statistics from easier
+                # stages can compress rewards in harder stages to near-zero
+                self._reset_vecnormalize_reward_stats()
 
         # Log curriculum status and progression metrics
         self.logger.record(
@@ -581,6 +587,39 @@ class CurriculumCallback(BaseCallback):
                 "curriculum/min_episodes_required", stage.min_episodes)
 
         return True
+
+    def _reset_vecnormalize_reward_stats(self):
+        """
+        Reset VecNormalize reward running statistics after curriculum advancement.
+        
+        This is critical for curriculum learning: the running mean/std learned in
+        earlier (easier) stages can cause rewards in harder stages to be normalized
+        incorrectly, compressing them to near-zero and preventing learning.
+        
+        We only reset reward stats (ret_rms), not observation stats (obs_rms),
+        because observations are more stable across curriculum stages.
+        """
+        vec_env = self.training_env
+        
+        # Find VecNormalize wrapper (may be nested)
+        while vec_env is not None:
+            if isinstance(vec_env, VecNormalize):
+                # Reset reward running mean/std
+                if hasattr(vec_env, 'ret_rms') and vec_env.ret_rms is not None:
+                    vec_env.ret_rms.mean = np.zeros_like(vec_env.ret_rms.mean)
+                    vec_env.ret_rms.var = np.ones_like(vec_env.ret_rms.var)
+                    vec_env.ret_rms.count = 1e-4
+                    
+                    # Also reset the returns buffer
+                    if hasattr(vec_env, 'returns'):
+                        vec_env.returns = np.zeros(vec_env.num_envs)
+                    
+                    if self.verbose > 0:
+                        print("[Curriculum] Reset VecNormalize reward statistics for new stage")
+                break
+            
+            # Move to wrapped environment
+            vec_env = getattr(vec_env, 'venv', None)
 
 
 class CheckpointWithStateCallback(CheckpointCallback):

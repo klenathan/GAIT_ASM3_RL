@@ -179,7 +179,7 @@ class Style1Config(ControlStyleConfig):
     max_steps: int = 3500
     # Encourage more active play with rotation
     penalty_inactivity: float = -0.05
-    # Curriculum Learning - ENABLED for gradual difficulty progression
+    # Curriculum Learning
     curriculum_enabled: bool = True
 
 
@@ -308,7 +308,7 @@ class TrainerConfig:
     load_replay_buffer: bool = True  # Load replay buffer (DQN only)
 
     # Learning rate schedule
-    lr_schedule: str = "cosine"  # "constant", "linear", "exponential", "cosine"
+    lr_schedule: str = "constant"  # "constant", "linear", "exponential", "cosine"
     lr_end: Optional[float] = 1e-5  # Final LR; defaults to start_lr * 0.1
     # Fraction of training for warmup (0 = none)
     lr_warmup_fraction: float = 0.0
@@ -356,7 +356,7 @@ class DQNHyperparams:
 
 @dataclass
 class PPOHyperparams:
-    learning_rate: float = 5e-4
+    learning_rate: float = 3e-4
     n_steps: int = 4096
     batch_size: int = 64
     n_epochs: int = 10
