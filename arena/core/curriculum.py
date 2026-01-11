@@ -102,6 +102,8 @@ class StageBasedStrategy(AdvancementStrategy):
     """
     Advancement strategy that uses criteria defined in the current CurriculumStage.
     This ensures each stage can have unique, progressively harder requirements.
+
+    IMPROVED: More lenient checking - focuses on core metrics and allows flexibility
     """
 
     def __init__(self, curriculum_manager: "CurriculumManager"):
@@ -133,19 +135,41 @@ class StageBasedStrategy(AdvancementStrategy):
         avg_win_time = np.mean(
             recent_win_times) if recent_win_times else 999999
 
-        # All criteria must be met
-        criteria_met = (
-            spawner_kill_rate >= stage.min_spawner_kill_rate
-            and win_rate >= stage.min_win_rate
-            and avg_survival >= stage.min_survival_steps
-            and avg_survival <= stage.max_survival_steps  # Not too passive
-            and avg_enemy_kills >= stage.min_enemy_kill_rate
-            and avg_damage_dealt >= stage.min_damage_dealt
-            and avg_damage_taken <= stage.max_damage_taken
-            and avg_win_time <= stage.max_win_time  # Fast wins required
+        # IMPROVED: Core criteria must be met, but with some leniency
+        # Use 90% threshold for most metrics to allow slight underperformance
+        leniency = 0.9
+
+        core_criteria = (
+            spawner_kill_rate >= stage.min_spawner_kill_rate * leniency
+            and win_rate >= stage.min_win_rate * leniency
+            and avg_survival >= stage.min_survival_steps * leniency
         )
 
-        return criteria_met
+        # Optional criteria - only check if they're meaningfully set
+        # (i.e., not at default values)
+        optional_criteria = True
+
+        if stage.max_survival_steps < 999999:
+            optional_criteria = optional_criteria and (
+                avg_survival <= stage.max_survival_steps * 1.1)
+
+        if stage.min_enemy_kill_rate > 0.1:
+            optional_criteria = optional_criteria and (
+                avg_enemy_kills >= stage.min_enemy_kill_rate * leniency)
+
+        if stage.min_damage_dealt > 0.1:
+            optional_criteria = optional_criteria and (
+                avg_damage_dealt >= stage.min_damage_dealt * leniency)
+
+        if stage.max_damage_taken < 999999:
+            optional_criteria = optional_criteria and (
+                avg_damage_taken <= stage.max_damage_taken * 1.1)
+
+        if stage.max_win_time < 999999:
+            optional_criteria = optional_criteria and (
+                avg_win_time <= stage.max_win_time * 1.1)
+
+        return core_criteria and optional_criteria
 
     def get_name(self) -> str:
         stage = self.curriculum_manager.current_stage
@@ -292,95 +316,101 @@ def get_style1_stages() -> List[CurriculumStage]:
     2. Aiming and hitting targets
     3. Combat while managing momentum
     4. Advanced maneuvering under pressure
+
+    FIXED v2: Reward structure is now CONSTANT across all stages.
+    - shaping_scale_mult = 1.0 for ALL stages (prevents VecNormalize mismatch)
+    - damage_penalty_mult = 1.0 for ALL stages (consistent penalty signal)
+    - Only DIFFICULTY parameters vary: spawn rate, enemy count, spawner health, enemy speed
+    - Smaller gap between early and late stages for better behavior transfer
     """
     return [
+        # Grade 0: Movement Basics
+        # Focus: Learn rotation, movement, and basic shooting
+        # Difficulty is reduced but reward structure matches final stage
+        CurriculumStage(
+            name="Grade 0: Movement Basics",
+            spawn_cooldown_mult=4.0,  # Slower spawns (was 20.0 - too easy)
+            max_enemies_mult=0.5,  # Fewer enemies
+            spawner_health_mult=0.5,  # Weaker spawners
+            enemy_speed_mult=0.7,  # Slower enemies
+            shaping_scale_mult=1.0,  # CONSTANT - same as final stage
+            damage_penalty_mult=1.0,  # CONSTANT - same as final stage
+            # Advancement criteria
+            min_spawner_kill_rate=0.5,
+            min_win_rate=0.0,
+            min_survival_steps=500,
+            min_episodes=40,
+        ),
         # Grade 1: Spawner Targeting
-        # Behavior Focus: Destroying spawners to progress phases
-        # Spawners are primary targets, moderate difficulty
+        # Focus: Prioritizing and destroying spawners
         CurriculumStage(
             name="Grade 1: Spawner Targeting",
-            spawn_cooldown_mult=10.0,  # Faster spawns - spawners matter
-            max_enemies_mult=0.6,  # More enemies from spawners
+            spawn_cooldown_mult=2.5,  # Moderate spawn rate
+            max_enemies_mult=0.6,  # Moderate enemies
             spawner_health_mult=0.65,  # Moderate spawner health
-            enemy_speed_mult=0.9,  # Faster enemies
-            shaping_scale_mult=2.5,  # Guidance for spawner focus
-            damage_penalty_mult=0.9,  # Higher penalty - be careful
-            # Advancement: Must kill spawners consistently
-            min_spawner_kill_rate=0.8,  # Must kill spawners regularly
-            min_win_rate=0.0,  # Wins not required yet
-            min_survival_steps=800,  # Good survival while targeting spawners
-            min_episodes=120,
+            enemy_speed_mult=0.8,  # Moderate enemy speed
+            shaping_scale_mult=1.0,  # CONSTANT
+            damage_penalty_mult=1.0,  # CONSTANT
+            # Advancement criteria
+            min_spawner_kill_rate=0.8,
+            min_win_rate=0.0,
+            min_survival_steps=600,
+            min_episodes=50,
         ),
         # Grade 2: Multi-Target Management
-        # Behavior Focus: Handling multiple threats simultaneously
-        # More enemies, faster spawns, need to balance priorities
+        # Focus: Handling multiple threats simultaneously
         CurriculumStage(
             name="Grade 2: Multi-Target Management",
-            spawn_cooldown_mult=1.4,  # Faster spawns - more pressure
-            max_enemies_mult=0.75,  # Many enemies at once
-            spawner_multiplier=1.5,  # More spawners to force multi-target handling
-            spawner_health_mult=0.8,  # Harder spawners
-            enemy_speed_mult=0.95,  # Fast enemies
-            shaping_scale_mult=1.8,  # Less guidance - more independent
-            damage_penalty_mult=1.2,  # Significant penalty
-            # Advancement: Must handle multiple targets and kill spawners
-            # Multiple spawner kills (reduced from 1.5)
+            spawn_cooldown_mult=1.8,  # Faster spawns
+            max_enemies_mult=0.75,  # More enemies
+            spawner_multiplier=1.2,  # Slightly more spawners
+            spawner_health_mult=0.8,  # Tougher spawners
+            enemy_speed_mult=0.9,  # Faster enemies
+            shaping_scale_mult=1.0,  # CONSTANT
+            damage_penalty_mult=1.0,  # CONSTANT
+            # Advancement criteria
             min_spawner_kill_rate=1.2,
-            # Some wins required (reduced from 0.15)
-            min_win_rate=0.10,
-            min_survival_steps=750,  # Good survival (reduced from 800)
-            max_survival_steps=2000,  # Don't be too passive (more lenient)
-            # Must actively fight enemies (reduced from 8.0)
-            min_enemy_kill_rate=5.0,
-            # Must deal damage (reduced from 150.0)
-            min_damage_dealt=100.0,
-            min_episodes=150,
+            min_win_rate=0.1,
+            min_survival_steps=700,
+            min_episodes=60,
         ),
         # Grade 3: Aggressive Combat
-        # Behavior Focus: Balanced aggression - fast clears while staying alive
-        # Emphasis on combat efficiency and win speed
+        # Focus: Efficient combat, approaching full difficulty
         CurriculumStage(
             name="Grade 3: Aggressive Combat",
-            spawn_cooldown_mult=1.1,  # Fast spawns
-            max_enemies_mult=0.85,  # Many enemies
-            spawner_multiplier=1.8,  # More spawners - higher multi-target demand
-            spawner_health_mult=0.9,  # Strong spawners
-            enemy_speed_mult=1.0,  # Full speed
-            shaping_scale_mult=1.0,  # Minimal guidance - independent combat
-            damage_penalty_mult=1.3,  # Moderate penalty - smart aggression
-            # Advancement: Must be aggressive AND efficient
-            min_spawner_kill_rate=2.2,  # High spawner kill rate
-            min_win_rate=0.35,  # Decent win rate
-            min_survival_steps=700,  # Moderate survival (don't hide)
-            max_survival_steps=1700,  # Win quickly, don't drag out
-            min_enemy_kill_rate=12.0,  # High enemy elimination
-            min_damage_dealt=250.0,  # High damage output
-            max_damage_taken=150.0,  # Good defense despite aggression
-            # max_win_time=1000,            # Fast wins (when winning)
-            min_episodes=200,
+            spawn_cooldown_mult=1.3,  # Near-normal spawn rate
+            max_enemies_mult=0.85,  # Near-normal enemy count
+            spawner_multiplier=1.2,  # More spawners for challenge
+            spawner_health_mult=0.9,  # Near-normal health
+            enemy_speed_mult=0.95,  # Near-normal speed
+            shaping_scale_mult=1.0,  # CONSTANT
+            damage_penalty_mult=1.0,  # CONSTANT
+            # Advancement criteria
+            min_spawner_kill_rate=1.5,
+            min_win_rate=0.2,
+            min_survival_steps=700,
+            min_episodes=80,
         ),
-        # Grade 4: Elite Performance
-        # Behavior Focus: Speed, precision, efficiency - win fast and clean
-        # Full difficulty, requires aggressive play with excellent execution
+        # Grade 4: Full Game - Normal Difficulty
+        # Final stage - train at full difficulty indefinitely
         CurriculumStage(
-            name="Grade 4: Elite Performance",
-            spawn_cooldown_mult=1.0,  # Full spawn rate
-            max_enemies_mult=1.0,  # Maximum enemies
-            spawner_multiplier=2.0,  # Maximize spawner density for elite training
-            spawner_health_mult=1.0,  # Full spawner health
-            enemy_speed_mult=1.0,  # Full enemy speed
-            shaping_scale_mult=0.5,  # Minimal shaping - pure skill
-            damage_penalty_mult=1.0,  # Standard penalty
-            # Final stage - elite combat performance required
-            min_spawner_kill_rate=3.0,  # Excellent spawner destruction
-            min_win_rate=0.6,  # High win rate
-            min_survival_steps=600,  # Don't need long survival - win fast!
-            max_survival_steps=1700,  # Must win quickly, no passive play
-            min_enemy_kill_rate=15.0,  # Very high kill rate
-            min_damage_dealt=350.0,  # Excellent damage output
-            max_damage_taken=120.0,  # Excellent defense
-            # max_win_time=850,             # Fast, efficient wins required
-            min_episodes=250,
+            name="Grade 4: Full Game",
+            spawn_cooldown_mult=1.0,  # Normal spawn rate
+            max_enemies_mult=1.0,  # Normal max enemies
+            spawner_multiplier=1.0,  # Normal spawner count
+            spawner_health_mult=1.0,  # Normal spawner health
+            enemy_speed_mult=1.0,  # Normal enemy speed
+            shaping_scale_mult=1.0,  # CONSTANT - same as all other stages
+            damage_penalty_mult=1.0,  # CONSTANT - same as all other stages
+            # Final stage - impossible criteria (stays here indefinitely)
+            min_spawner_kill_rate=999.0,
+            min_win_rate=1.0,
+            min_survival_steps=999999,
+            max_survival_steps=999999,
+            min_enemy_kill_rate=999.0,
+            min_damage_dealt=999999.0,
+            max_damage_taken=0.0,
+            min_episodes=999999,
         ),
     ]
 

@@ -14,16 +14,16 @@ import subprocess
 import sys
 
 # Import algorithms to register them - needed for AlgorithmRegistry
-from arena.training.algorithms import dqn, ppo, ppo_lstm, ppo_dict, a2c  # noqa: F401
+from arena.training.algorithms import dqn, ppo, ppo_lstm
 
 
 def find_latest_model(algo: str = None, style: int = None) -> str:
     """Find the most recently modified model file."""
     runs_dir = Path("runs")
-    
+
     if not runs_dir.exists():
         raise FileNotFoundError("runs/ directory not found")
-    
+
     # Build search pattern
     if algo and style:
         search_pattern = f"{algo}/style{style}/**/*.zip"
@@ -33,16 +33,17 @@ def find_latest_model(algo: str = None, style: int = None) -> str:
         search_pattern = f"*/style{style}/**/*.zip"
     else:
         search_pattern = "**/*.zip"
-    
+
     # Find all model files
     model_files = list(runs_dir.glob(search_pattern))
-    
+
     if not model_files:
-        raise FileNotFoundError(f"No models found matching pattern: {search_pattern}")
-    
+        raise FileNotFoundError(
+            f"No models found matching pattern: {search_pattern}")
+
     # Sort by modification time (most recent first)
     model_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-    
+
     return str(model_files[0])
 
 
@@ -51,68 +52,72 @@ def main():
         description="Evaluate the latest trained model",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    
-    parser.add_argument('--algo', type=str, default=None, 
-                       help='Algorithm to search for (ppo, ppo_lstm, etc.)')
+
+    parser.add_argument('--algo', type=str, default=None,
+                        help='Algorithm to search for (ppo, ppo_lstm, etc.)')
     parser.add_argument('--style', type=int, default=None, choices=[1, 2],
-                       help='Control style to search for')
+                        help='Control style to search for')
     parser.add_argument('--episodes', type=int, default=100,
-                       help='Number of episodes to evaluate (default: 100)')
+                        help='Number of episodes to evaluate (default: 100)')
     parser.add_argument('--deterministic', action='store_true', default=True,
-                       help='Use deterministic policy (default)')
+                        help='Use deterministic policy (default)')
     parser.add_argument('--stochastic', action='store_true',
-                       help='Use stochastic policy')
+                        help='Use stochastic policy')
     parser.add_argument('--output', type=str, default=None,
-                       help='Output JSON file')
+                        help='Output JSON file')
     parser.add_argument('--csv', type=str, default=None,
-                       help='Output CSV file for tabular results')
+                        help='Output CSV file for tabular results')
     parser.add_argument('--final-only', action='store_true',
-                       help='Only search in final/ directories')
+                        help='Only search in final/ directories')
     parser.add_argument('--checkpoint-only', action='store_true',
-                       help='Only search in checkpoints/ directories')
-    
+                        help='Only search in checkpoints/ directories')
+
     # Curriculum options
     parser.add_argument('--curriculum-stage', type=int, default=None, choices=[0, 1, 2, 3, 4, 5],
-                       help='Curriculum stage (0-5). None=full difficulty.')
+                        help='Curriculum stage (0-5). None=full difficulty.')
     parser.add_argument('--auto-curriculum', action='store_true',
-                       help='Auto-detect curriculum stage from training state file')
-    
+                        help='Auto-detect curriculum stage from training state file')
+
     # Performance options
-    parser.add_argument('--workers', type=int, default=1, 
-                       help='Number of parallel environments for faster evaluation (default: 1)')
-    
+    parser.add_argument('--workers', type=int, default=1,
+                        help='Number of parallel environments for faster evaluation (default: 1)')
+
     args = parser.parse_args()
-    
+
     try:
         print("Searching for latest model...")
         model_path = find_latest_model(args.algo, args.style)
         print(f"✓ Found: {model_path}")
-        
+
         # Filter by directory type if requested
         if args.final_only and 'final' not in model_path:
             print("Searching for latest final model...")
             runs_dir = Path("runs")
-            pattern = f"{'**/' if not args.algo else f'{args.algo}/**/'}" + "**/final/*.zip"
+            pattern = f"{'**/' if not args.algo else f'{args.algo}/**/'}" + \
+                "**/final/*.zip"
             final_models = list(runs_dir.glob(pattern))
             if final_models:
-                final_models.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+                final_models.sort(
+                    key=lambda p: p.stat().st_mtime, reverse=True)
                 model_path = str(final_models[0])
                 print(f"✓ Found final model: {model_path}")
             else:
                 print("No final models found, using latest model anyway")
-        
+
         if args.checkpoint_only and 'checkpoints' not in model_path:
             print("Searching for latest checkpoint model...")
             runs_dir = Path("runs")
-            pattern = f"{'**/' if not args.algo else f'{args.algo}/**/'}" + "**/checkpoints/*.zip"
+            pattern = f"{'**/' if not args.algo else f'{args.algo}/**/'}" + \
+                "**/checkpoints/*.zip"
             checkpoint_models = list(runs_dir.glob(pattern))
             if checkpoint_models:
-                checkpoint_models.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+                checkpoint_models.sort(
+                    key=lambda p: p.stat().st_mtime, reverse=True)
                 model_path = str(checkpoint_models[0])
                 print(f"✓ Found checkpoint model: {model_path}")
             else:
                 print("No checkpoint models found, using latest model anyway")
-        
+
         # Detect style from path if not specified
         style = args.style
         if style is None:
@@ -122,7 +127,7 @@ def main():
                 style = 2
             else:
                 style = 1  # Default
-        
+
         # Build eval command
         cmd = [
             sys.executable, '-m', 'arena.eval_headless',
@@ -130,33 +135,33 @@ def main():
             '--episodes', str(args.episodes),
             '--style', str(style)
         ]
-        
+
         if args.stochastic:
             cmd.append('--stochastic')
-        
+
         if args.output:
             cmd.extend(['--output', args.output])
-        
+
         if args.csv:
             cmd.extend(['--csv', args.csv])
-        
+
         # Pass curriculum options
         if args.curriculum_stage is not None:
             cmd.extend(['--curriculum-stage', str(args.curriculum_stage)])
-        
+
         if args.auto_curriculum:
             cmd.append('--auto-curriculum')
-        
+
         # Pass workers option for parallel evaluation
         if args.workers > 1:
             cmd.extend(['--workers', str(args.workers)])
-        
+
         print(f"\nRunning evaluation with {args.episodes} episodes...")
         print(f"Command: {' '.join(cmd)}\n")
-        
+
         # Run evaluation
         subprocess.run(cmd)
-    
+
     except FileNotFoundError as e:
         print(f"Error: {e}")
         sys.exit(1)
@@ -169,4 +174,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

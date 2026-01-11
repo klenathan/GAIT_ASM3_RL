@@ -154,7 +154,7 @@ class ControlStyleConfig:
     shaping_clip: float = 0.2
 
     # Curriculum Learning
-    curriculum_enabled: bool = True
+    curriculum_enabled: bool = False
 
     # Style 2 specific: Aiming guidance for shooting (defaults that have no effect for style 1)
     # Bonus given ONLY when shooting while aimed at spawner (prevents exploitation)
@@ -174,11 +174,13 @@ class Style1Config(ControlStyleConfig):
     """
 
     # Style 1 may benefit from stronger shaping initially due to rotation complexity
-    shaping_scale: float = 1.2
+    shaping_scale: float = 1
     # Slightly longer episodes to account for rotation learning curve
     max_steps: int = 3500
     # Encourage more active play with rotation
     penalty_inactivity: float = -0.05
+    # Curriculum Learning
+    curriculum_enabled: bool = False
 
 
 @dataclass
@@ -306,7 +308,7 @@ class TrainerConfig:
     load_replay_buffer: bool = True  # Load replay buffer (DQN only)
 
     # Learning rate schedule
-    lr_schedule: str = "cosine"  # "constant", "linear", "exponential", "cosine"
+    lr_schedule: str = "constant"  # "constant", "linear", "exponential", "cosine"
     lr_end: Optional[float] = 1e-5  # Final LR; defaults to start_lr * 0.1
     # Fraction of training for warmup (0 = none)
     lr_warmup_fraction: float = 0.0
@@ -354,7 +356,7 @@ class DQNHyperparams:
 
 @dataclass
 class PPOHyperparams:
-    learning_rate: float = 5e-4
+    learning_rate: float = 3e-4
     n_steps: int = 4096
     batch_size: int = 64
     n_epochs: int = 10

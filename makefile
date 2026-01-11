@@ -3,7 +3,8 @@ evaluate:
 
 eval_headless:
 	uv run python -m arena.eval_headless \
-		--model runs/ppo_lstm/style1/ppo_lstm_style1_20260109_203229/checkpoints/ppo_lstm_style1_20260109_203229_7000000_steps.zip \
+		--model \
+		runs/ppo/style1/ppo_style1_20260112_042104/checkpoints/ppo_style1_20260112_042104_12000000_steps.zip \
 		--episodes 100 \
 		--device cpu \
 		--workers 10 \
@@ -26,16 +27,27 @@ eval_headless_multiple_s2:
 eval_headless_multiple_s1:
 	uv run python -m arena.eval_headless \
 	--models \
+	runs/ppo/style1/ppo_style1_20260111_194808/checkpoints/ppo_style1_20260111_194808_9500000_steps.zip \
+	runs/ppo/style1/ppo_style1_20260111_214646/checkpoints/ppo_style1_20260111_214646_11000000_steps.zip \
+	runs/ppo/style1/ppo_style1_20260112_042104/checkpoints/ppo_style1_20260112_042104_14500000_steps.zip \
+	--workers 10 \
+	--stochastic \
+	--csv comparison_s1_curriculum.csv \
+	--episodes 100 
+
+abc:
+	runs/ppo/style1/ppo_style1_20260109_185210/checkpoints/ppo_style1_20260109_185210_11200000_steps.zip \
+	runs/ppo/style1/ppo_style1_20260111_214646/checkpoints/ppo_style1_20260111_214646_15000000_steps.zip \
 	runs/ppo_lstm/style1/ppo_lstm_style1_20260109_203229/checkpoints/ppo_lstm_style1_20260109_203229_7000000_steps.zip \
 	runs/dqn/style1/dqn_style1_20260109_190750/final/dqn_style1_20260109_190750_final.zip \
 	runs/ppo/style1/ppo_style1_20260109_204327/checkpoints/ppo_style1_20260109_204327_1600000_steps.zip \
-	--workers 10 \
-	--stochastic \
-	--csv comparison_s1.csv \
-	--episodes 100
 
 train_ppo_lstm_s1:
 	uv run python -m arena.train --algo ppo_lstm --style 1 --steps 10000000 --no-render --device cpu
 
 train_ppo_ppo_s1:
-	uv run python -m arena.train --algo ppo --style 1 --steps 15000000 --no-render --device cpu
+	uv run python -m arena.train --algo ppo --style 1 --steps 10000000 --no-render --device cpu
+
+train_ppo_ppo_s1_continue:
+	uv run python -m arena.train --algo ppo --style 1 --steps 20000000 --no-render --device cpu \
+	--load-model runs/ppo/style1/ppo_style1_20260112_031438/checkpoints/ppo_style1_20260112_031438_9000000_steps.zip
