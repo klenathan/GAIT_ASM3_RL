@@ -19,21 +19,21 @@ Usage:
     python -m arena.eval_headless --model model.zip --episodes 1000 --output results.json
 """
 
+# Suppress warnings BEFORE any imports to prevent pkg_resources deprecation warning from pygame
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
 import argparse
 import json
 import os
 import glob
 import time
-import warnings
 from typing import Dict, List, Optional, Tuple, Any
 from pathlib import Path
 from dataclasses import dataclass, asdict
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np
-
-# Suppress warnings
-warnings.filterwarnings("ignore", category=UserWarning)
-warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 from arena.training.registry import AlgorithmRegistry
 from arena.training.algorithms import dqn, ppo, ppo_lstm, ppo_dict, a2c  # noqa: F401 - Import to register algorithms
@@ -42,7 +42,7 @@ from arena.core.environment_dict import ArenaDictEnv
 from arena.core.environment import ArenaEnv
 from arena.core.curriculum import CurriculumManager, CurriculumConfig
 from arena.core.device import DeviceManager
-from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNormalize
 
 
 @dataclass
@@ -127,6 +127,17 @@ class HeadlessEvaluator:
             if algo in name:
                 return algo
         return "ppo"
+    
+    def _infer_style(self, model_path: str) -> int:
+        """Infer control style from model path."""
+        path_lower = model_path.lower()
+        if 'style2' in path_lower:
+            return 2
+        elif 'style1' in path_lower:
+            return 1
+        else:
+            # Default to style 1 if not found in path
+            return 1
     
     def _find_vecnormalize_stats(self, model_path: str) -> Optional[str]:
         """Find VecNormalize stats file matching the model."""
@@ -273,7 +284,7 @@ class HeadlessEvaluator:
             raise ValueError(f"Failed to load model from {model_path}: {e}")
     
     def _create_env(self, style: int, algo: str, vecnorm_path: Optional[str] = None, 
-                    curriculum_stage: Optional[int] = None):
+                    curriculum_stage: Optional[int] = None, num_envs: int = 1):
         """Create environment with VecNormalize if available.
         
         Args:
@@ -282,6 +293,7 @@ class HeadlessEvaluator:
             vecnorm_path: Path to VecNormalize stats
             curriculum_stage: If specified, apply curriculum modifiers from this stage.
                               None means no curriculum (full difficulty).
+            num_envs: Number of parallel environments to create.
         """
         # Create curriculum manager if stage specified
         curriculum_manager = None
@@ -290,15 +302,33 @@ class HeadlessEvaluator:
             curriculum_manager.current_stage_index = curriculum_stage
             self._log(f"[OK] Using curriculum stage {curriculum_stage}: {curriculum_manager.current_stage.name}")
         
-        # Use appropriate environment for algorithm
-        if algo == "ppo_dict":
-            base_env = ArenaDictEnv(control_style=style, render_mode=None)
-        else:
-            base_env = ArenaEnv(control_style=style, render_mode=None, 
-                               curriculum_manager=curriculum_manager)
+        def make_env(env_id: int):
+            """Create a single environment for parallel execution."""
+            def _init():
+                # Create fresh curriculum manager for each env
+                cm = None
+                if curriculum_stage is not None:
+                    cm = CurriculumManager(CurriculumConfig(enabled=True))
+                    cm.current_stage_index = curriculum_stage
+                
+                if algo == "ppo_dict":
+                    return ArenaDictEnv(control_style=style, render_mode=None)
+                else:
+                    return ArenaEnv(control_style=style, render_mode=None, curriculum_manager=cm)
+            return _init
         
-        # Wrap in DummyVecEnv
-        vec_env = DummyVecEnv([lambda: base_env])
+        # Create vectorized environment
+        if num_envs > 1:
+            vec_env = SubprocVecEnv([make_env(i) for i in range(num_envs)])
+            self._log(f"[OK] Created {num_envs} parallel environments (SubprocVecEnv)")
+        else:
+            # Use appropriate environment for algorithm
+            if algo == "ppo_dict":
+                base_env = ArenaDictEnv(control_style=style, render_mode=None)
+            else:
+                base_env = ArenaEnv(control_style=style, render_mode=None, 
+                                   curriculum_manager=curriculum_manager)
+            vec_env = DummyVecEnv([lambda: base_env])
         
         # Load VecNormalize stats if available
         if vecnorm_path and os.path.exists(vecnorm_path):
@@ -386,6 +416,88 @@ class HeadlessEvaluator:
             first_spawner_kill_step=first_spawner_kill_step
         )
     
+    def run_episodes_parallel(
+        self,
+        model,
+        env,
+        num_envs: int,
+        num_episodes: int,
+        is_recurrent: bool,
+        deterministic: bool = True
+    ) -> List[EpisodeStats]:
+        """Run episodes in parallel using vectorized environments.
+        
+        Args:
+            model: The trained model
+            env: Vectorized environment (SubprocVecEnv or DummyVecEnv with VecNormalize)
+            num_envs: Number of parallel environments
+            num_episodes: Total number of episodes to collect
+            is_recurrent: Whether the model uses LSTM
+            deterministic: Use deterministic policy
+            
+        Returns:
+            List of EpisodeStats for all completed episodes
+        """
+        completed_episodes = []
+        
+        # Initialize observations and states
+        obs = env.reset()
+        if isinstance(obs, tuple):
+            obs = obs[0]
+        
+        lstm_states = None
+        episode_starts = np.ones(num_envs, dtype=bool)
+        
+        # Track running episode stats for each environment
+        running_rewards = np.zeros(num_envs)
+        running_lengths = np.zeros(num_envs, dtype=int)
+        
+        while len(completed_episodes) < num_episodes:
+            # Predict actions for all environments
+            if is_recurrent:
+                actions, lstm_states = model.predict(
+                    obs,
+                    state=lstm_states,
+                    episode_start=episode_starts,
+                    deterministic=deterministic
+                )
+            else:
+                actions, _ = model.predict(obs, deterministic=deterministic)
+            
+            # Step all environments
+            obs, rewards, dones, infos = env.step(actions)
+            
+            # Update running stats
+            running_rewards += rewards
+            running_lengths += 1
+            episode_starts = dones.copy()
+            
+            # Collect completed episodes
+            for i, (done, info) in enumerate(zip(dones, infos)):
+                if done and len(completed_episodes) < num_episodes:
+                    episode_stats = EpisodeStats(
+                        episode_reward=float(running_rewards[i]),
+                        episode_length=int(running_lengths[i]),
+                        win=info.get('win', False),
+                        win_step=info.get('win_step', -1),
+                        phase_reached=info.get('phase', 0),
+                        spawners_destroyed=info.get('total_spawners_destroyed', 0),
+                        enemies_destroyed=info.get('total_enemies_destroyed', 0),
+                        final_player_health=info.get('player_health', 0),
+                        first_spawner_kill_step=info.get('first_spawner_kill_step', -1)
+                    )
+                    completed_episodes.append(episode_stats)
+                    
+                    # Reset running stats for this env
+                    running_rewards[i] = 0
+                    running_lengths[i] = 0
+                    
+                    # Progress indicator
+                    if len(completed_episodes) % max(1, num_episodes // 10) == 0:
+                        self._log(f"  Progress: {len(completed_episodes)}/{num_episodes} episodes ({len(completed_episodes)/num_episodes*100:.1f}%)")
+        
+        return completed_episodes
+    
     def evaluate_model(
         self,
         model_path: str,
@@ -395,7 +507,8 @@ class HeadlessEvaluator:
         algo: Optional[str] = None,
         save_episodes: bool = False,
         curriculum_stage: Optional[int] = None,
-        auto_curriculum: bool = False
+        auto_curriculum: bool = False,
+        num_workers: int = 1
     ) -> ModelEvaluation:
         """
         Evaluate a model over multiple episodes.
@@ -409,13 +522,14 @@ class HeadlessEvaluator:
             save_episodes: Whether to include raw episode data in results
             curriculum_stage: Curriculum stage to use (0-5). None means no curriculum (full difficulty).
             auto_curriculum: If True, auto-detect curriculum stage from training state file.
+            num_workers: Number of parallel environments (default: 1 = sequential)
         
         Returns:
             ModelEvaluation with comprehensive statistics
         """
         self._log(f"\n{'='*80}")
         self._log(f"Evaluating: {os.path.basename(model_path)}")
-        self._log(f"Episodes: {num_episodes} | Style: {style} | Deterministic: {deterministic}")
+        self._log(f"Episodes: {num_episodes} | Style: {style} | Deterministic: {deterministic} | Workers: {num_workers}")
         self._log(f"{'='*80}")
         
         start_time = time.time()
@@ -443,20 +557,27 @@ class HeadlessEvaluator:
             self._log("⚠ WARNING: No VecNormalize stats found!")
         
         # Create environment with curriculum stage if specified
-        env, has_vecnorm = self._create_env(style, algo, vecnorm_path, effective_curriculum_stage)
+        env, has_vecnorm = self._create_env(style, algo, vecnorm_path, effective_curriculum_stage, num_workers)
         self._log(f"[OK] Environment created (VecNormalize: {has_vecnorm})")
         
         # Run episodes
-        self._log(f"\nRunning {num_episodes} episodes...")
-        episodes = []
+        self._log(f"\nRunning {num_episodes} episodes with {num_workers} parallel environments...")
         
-        for i in range(num_episodes):
-            episode_stats = self.run_episode(model, env, is_recurrent, deterministic)
-            episodes.append(episode_stats)
-            
-            # Progress indicator
-            if (i + 1) % max(1, num_episodes // 10) == 0:
-                self._log(f"  Progress: {i+1}/{num_episodes} episodes ({(i+1)/num_episodes*100:.1f}%)")
+        if num_workers > 1:
+            # Parallel episode execution
+            episodes = self.run_episodes_parallel(
+                model, env, num_workers, num_episodes, is_recurrent, deterministic
+            )
+        else:
+            # Sequential episode execution (original behavior)
+            episodes = []
+            for i in range(num_episodes):
+                episode_stats = self.run_episode(model, env, is_recurrent, deterministic)
+                episodes.append(episode_stats)
+                
+                # Progress indicator
+                if (i + 1) % max(1, num_episodes // 10) == 0:
+                    self._log(f"  Progress: {i+1}/{num_episodes} episodes ({(i+1)/num_episodes*100:.1f}%)")
         
         env.close()
         eval_time = time.time() - start_time
@@ -656,6 +777,70 @@ def save_results(evaluations: List[ModelEvaluation], output_path: str):
     print(f"[OK] Results saved to: {output_path}")
 
 
+def save_results_csv(evaluations: List[ModelEvaluation], output_path: str):
+    """Save evaluation results to CSV file in a structured format.
+    
+    The CSV has models as rows and metrics as columns (transposed format).
+    """
+    import csv
+    
+    # Define the metrics to export (in order)
+    metrics = [
+        ('Algorithm', lambda e: e.algorithm.upper()),
+        ('Style', lambda e: str(e.style)),
+        ('Deterministic', lambda e: str(e.deterministic)),
+        ('Episodes', lambda e: str(e.total_episodes)),
+        ('Eval Time (s)', lambda e: f"{e.eval_time_seconds:.2f}"),
+        ('Speed (eps/sec)', lambda e: f"{e.total_episodes / e.eval_time_seconds:.1f}"),
+        ('Win Rate (%)', lambda e: f"{e.win_rate * 100:.1f}"),
+        ('Avg Win Step', lambda e: f"{int(e.mean_win_step)}" if e.mean_win_step > 0 else "N/A"),
+        ('Mean Reward', lambda e: f"{e.mean_reward:.2f} ± {e.std_reward:.2f}"),
+        ('Median Reward', lambda e: f"{e.median_reward:.2f}"),
+        ('Reward Min', lambda e: f"{e.min_reward:.2f}"),
+        ('Reward Max', lambda e: f"{e.max_reward:.2f}"),
+        ('Mean Episode Length', lambda e: f"{int(e.mean_length)} ± {int(e.std_length)}"),
+        ('Median Episode Length', lambda e: f"{int(e.median_length)}"),
+        ('Episode Length Min', lambda e: str(e.min_length)),
+        ('Episode Length Max', lambda e: str(e.max_length)),
+        ('Spawners / Episode', lambda e: f"{e.mean_spawners_destroyed:.2f} ± {e.std_spawners_destroyed:.2f}"),
+        ('Enemies / Episode', lambda e: f"{e.mean_enemies_destroyed:.1f}"),
+        ('Avg Phase Reached', lambda e: f"{e.mean_phase_reached:.2f}"),
+        ('Avg Final HP', lambda e: f"{int(e.mean_final_health)}"),
+        ('First Spawner Kill (steps)', lambda e: f"{int(e.mean_first_spawner_kill)}" if e.mean_first_spawner_kill > 0 else "N/A"),
+    ]
+    
+    # Add phase distribution metrics
+    max_phase = max(max(e.phase_distribution.keys()) for e in evaluations) if evaluations else 0
+    for phase in range(1, max_phase + 1):
+        metrics.append((
+            f'Phase {phase} (%)',
+            lambda e, p=phase: f"{e.phase_distribution.get(p, 0) / e.total_episodes * 100:.1f}"
+        ))
+    
+    # Add spawner kill distribution metrics
+    max_spawners = max(max(e.spawner_kill_distribution.keys()) for e in evaluations) if evaluations else 0
+    for kills in range(max_spawners + 1):
+        if any(e.spawner_kill_distribution.get(kills, 0) > 0 for e in evaluations):
+            metrics.append((
+                f'{kills} Spawners Killed (%)',
+                lambda e, k=kills: f"{e.spawner_kill_distribution.get(k, 0) / e.total_episodes * 100:.1f}"
+            ))
+    
+    with open(output_path, 'w', newline='') as f:
+        writer = csv.writer(f)
+        
+        # Write header row with metric names (transposed: models as rows, metrics as columns)
+        header = ['Model'] + [metric_name for metric_name, _ in metrics]
+        writer.writerow(header)
+        
+        # Write each model as a row
+        for ev in evaluations:
+            row = [ev.model_name] + [metric_fn(ev) for _, metric_fn in metrics]
+            writer.writerow(row)
+    
+    print(f"[OK] CSV results saved to: {output_path}")
+
+
 def find_models_in_directory(directory: str, pattern: str = "*.zip") -> List[str]:
     """Recursively find model files in directory."""
     path = Path(directory)
@@ -678,12 +863,13 @@ def main():
     
     # Evaluation parameters
     parser.add_argument('--episodes', type=int, default=100, help='Number of episodes per model (default: 100)')
-    parser.add_argument('--style', type=int, default=1, choices=[1, 2], help='Control style (default: 1)')
+    parser.add_argument('--style', type=int, default=None, choices=[1, 2], help='Control style (auto-detected from model path if not specified)')
     parser.add_argument('--stochastic', action='store_true', help='Use stochastic policy (default: deterministic)')
     parser.add_argument('--algo', type=str, default=None, help='Algorithm type (auto-detected if not specified)')
     
     # Output options
     parser.add_argument('--output', type=str, default=None, help='Output JSON file path')
+    parser.add_argument('--csv', type=str, default=None, help='Output CSV file path for tabular results')
     parser.add_argument('--save-episodes', action='store_true', help='Save raw episode data in output')
     parser.add_argument('--quiet', action='store_true', help='Suppress progress messages')
     parser.add_argument('--compare', action='store_true', help='Print comparison table for multiple models')
@@ -725,24 +911,29 @@ def main():
     evaluations = []
     
     if args.workers > 1 and len(model_paths) > 1:
-        # Parallel evaluation of multiple models
-        print(f"Running parallel evaluation with {args.workers} workers...")
-        # Note: This is simplified - full parallel implementation would require more work
-        # For now, run sequentially
-        print("Note: Multi-worker support not yet implemented, running sequentially")
-        args.workers = 1
+        # When evaluating multiple models with parallel workers, we use the workers
+        # for parallel episodes within each model (not parallel models)
+        print(f"Using {args.workers} parallel environments per model for evaluation...")
     
     for model_path in model_paths:
         try:
+            # Auto-detect style from model path if not specified
+            style = args.style
+            if style is None:
+                style = evaluator._infer_style(model_path)
+                if not args.quiet:
+                    print(f"Auto-detected style: {style} (from model path)")
+            
             eval_result = evaluator.evaluate_model(
                 model_path=model_path,
-                style=args.style,
+                style=style,
                 num_episodes=args.episodes,
                 deterministic=not args.stochastic,
                 algo=args.algo,
                 save_episodes=args.save_episodes,
                 curriculum_stage=args.curriculum_stage,
-                auto_curriculum=args.auto_curriculum
+                auto_curriculum=args.auto_curriculum,
+                num_workers=args.workers
             )
             evaluations.append(eval_result)
             
@@ -763,6 +954,10 @@ def main():
     # Save results if requested
     if args.output:
         save_results(evaluations, args.output)
+    
+    # Save CSV results if requested
+    if args.csv:
+        save_results_csv(evaluations, args.csv)
     
     print(f"\n[OK] Evaluation complete! Evaluated {len(evaluations)} model(s) with {args.episodes} episodes each.")
 

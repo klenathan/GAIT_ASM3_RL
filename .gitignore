@@ -28,5 +28,6 @@ models/**/*.pkl
 logs/*
 
 runs/
+report
 
 .r2.env

@@ -220,7 +220,8 @@ class Style2Config(ControlStyleConfig):
     reward_aim_spawner_max: float = (
         0.3  # Bonus when shooting while aimed at spawner center
     )
-    aim_cone_degrees: float = 30.0  # Degrees from center for any bonus (0 outside cone)
+    # Degrees from center for any bonus (0 outside cone)
+    aim_cone_degrees: float = 30.0
 
     # Curriculum Learning - DISABLED to fast-track to Stage 5 (Full Difficulty)
     curriculum_enabled: bool = False
@@ -311,7 +312,8 @@ class TrainerConfig:
     lr_warmup_fraction: float = 0.0
 
     # DQN specific
-    dqn_hidden_layers: List[int] = field(default_factory=lambda: [256, 128, 64])
+    dqn_hidden_layers: List[int] = field(
+        default_factory=lambda: [256, 128, 64])
     dqn_activation: str = "SiLU"
 
     # PPO specific

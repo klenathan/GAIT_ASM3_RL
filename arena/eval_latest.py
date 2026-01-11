@@ -64,6 +64,8 @@ def main():
                        help='Use stochastic policy')
     parser.add_argument('--output', type=str, default=None,
                        help='Output JSON file')
+    parser.add_argument('--csv', type=str, default=None,
+                       help='Output CSV file for tabular results')
     parser.add_argument('--final-only', action='store_true',
                        help='Only search in final/ directories')
     parser.add_argument('--checkpoint-only', action='store_true',
@@ -74,6 +76,10 @@ def main():
                        help='Curriculum stage (0-5). None=full difficulty.')
     parser.add_argument('--auto-curriculum', action='store_true',
                        help='Auto-detect curriculum stage from training state file')
+    
+    # Performance options
+    parser.add_argument('--workers', type=int, default=1, 
+                       help='Number of parallel environments for faster evaluation (default: 1)')
     
     args = parser.parse_args()
     
@@ -131,12 +137,19 @@ def main():
         if args.output:
             cmd.extend(['--output', args.output])
         
+        if args.csv:
+            cmd.extend(['--csv', args.csv])
+        
         # Pass curriculum options
         if args.curriculum_stage is not None:
             cmd.extend(['--curriculum-stage', str(args.curriculum_stage)])
         
         if args.auto_curriculum:
             cmd.append('--auto-curriculum')
+        
+        # Pass workers option for parallel evaluation
+        if args.workers > 1:
+            cmd.extend(['--workers', str(args.workers)])
         
         print(f"\nRunning evaluation with {args.episodes} episodes...")
         print(f"Command: {' '.join(cmd)}\n")
