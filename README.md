@@ -6,7 +6,7 @@
 >
 > **Student Name - Student ID:** Tran Nam Thai - s3891890
 >
-> **Student Name - Student ID:** Truong Nhat Anh - s38978231
+> **Student Name - Student ID:** Truong Nhat Anh - s3878231
 
 ---
 
@@ -77,7 +77,7 @@ pip install -r requirements.txt
 
 ---
 
-## 3. Running the Arena (Direct Commands)
+## 3. Running the Arena - Starwars Game (Direct Commands)
 
 All of the following commands are run from the **repository root** and do **not** use `make`.
 
@@ -141,18 +141,29 @@ The **Gridworld** environment lives in `gridworld/`. Key example commands (see `
 
 ```bash
 # Train (example)
-python gridworld/main.py --level 4 --episodes 100000 --save_model level4_q_sarsa.pkl --no_render --algo sarsa
+uv run python -m gridworld.main --level 4 --episodes 100000 --save_model level4_q_sarsa.pkl --no_render --algo sarsa
 
 # Evaluate in UI mode
-python -m gridworld.evaluate --level 4 --model runs/gridworld/<run_name>/final/level4_q_sarsa.pkl --mode ui --render_delay 0.3
+uv run python -m gridworld.evaluate --level 4 --model runs/gridworld/<run_name>/final/level4_q_sarsa.pkl --mode ui --render_delay 0.3
 
 # Evaluate headless
-python -m gridworld.evaluate --level 4 --model runs/gridworld/<run_name>/final/level4_q_sarsa.pkl --mode headless --episodes 100
+uv run python -m gridworld.evaluate --level 4 --model runs/gridworld/<run_name>/final/level4_q_sarsa.pkl --mode headless --episodes 100
 ```
 
 ---
 
 ## 5. Plots & Analysis
 
+### 5.1 Notebook
+
 The root-level notebooks (`rl_training.ipynb`, `model_comparison.ipynb`) read from generated CSVs (e.g. `comparison_s1_curriculum.csv`, `comparison_s2.csv`) and produce visualizations saved under `model_performance/` and `outcomes/`.  
 Ensure the CSVs are regenerated via the `eval_headless_*` make targets before re-running the notebooks if you want up-to-date charts.
+
+### 5.2 TensorBoard
+
+```bash
+uv run tensorboard --logdir runs
+```
+
+Run the above command and navigate using left panel to see logs in TensorBoard
+
